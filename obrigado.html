@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Forte Apoio - Suas Fotos Estão Prontas!</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Supabase Client SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'team-red': '#da251c',
+            'team-green': '#008c45',
+            'team-yellow': '#ffcc00'
+          },
+          boxShadow: {
+            'elevated': '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+            'card': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes pulse-slow {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.9; }
+    }
+    .animate-pulse-slow {
+      animation: pulse-slow 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 h-full flex flex-col items-center justify-center font-sans antialiased">
+
+  <!-- Mobile-first container -->
+  <div class="relative flex h-full w-full flex-col overflow-hidden bg-white md:my-4 md:h-[calc(100%-2rem)] md:max-w-[480px] md:rounded-2xl md:border md:border-slate-200 md:shadow-elevated">
+    
+    <!-- HEADER -->
+    <header class="bg-white border-b border-slate-200 px-5 py-4 flex-shrink-0 flex items-center justify-between z-10">
+      <div class="flex items-center gap-2">
+        <div class="h-8 w-8 rounded-full bg-slate-900 flex items-center justify-center text-white">
+          <i class="fa-solid fa-camera text-sm"></i>
+        </div>
+        <span class="font-extrabold text-slate-800 text-lg tracking-tight">FotoNaCampanha</span>
+      </div>
+      <div id="candidate-badge" class="hidden text-xs font-semibold px-2.5 py-1 rounded-full text-white bg-slate-400">
+        <!-- Candidate Name -->
+      </div>
+    </header>
+
+    <!-- PROGRESS BAR (Complete) -->
+    <div class="h-1.5 w-full bg-slate-100 flex-shrink-0 relative overflow-hidden">
+      <div id="top-progress-bar" class="h-full bg-slate-200 transition-all duration-500 ease-out" style="width: 100%;"></div>
+    </div>
+
+    <!-- MAIN CONTAINER -->
+    <main class="flex-1 overflow-y-auto bg-slate-50 flex flex-col p-5 relative justify-center">
+      
+      <!-- STATE 1: LOADING / POLLING -->
+      <div id="state-loading" class="flex flex-col items-center justify-center text-center space-y-6 py-12">
+        <!-- Spinner -->
+        <div class="relative">
+          <div class="h-16 w-16 rounded-full border-4 border-slate-200 border-t-slate-800 animate-spin"></div>
+          <div class="absolute inset-0 flex items-center justify-center">
+            <i class="fa-solid fa-wand-magic-sparkles text-slate-800 text-lg animate-pulse-slow"></i>
+          </div>
+        </div>
+
+        <div class="space-y-2 max-w-sm px-4">
+          <h2 id="loader-title" class="text-lg font-bold text-slate-800">Processando seu pedido...</h2>
+          <p id="loader-text" class="text-xs text-slate-500 leading-relaxed">
+            Estamos aguardando a confirmação de pagamento da Cakto para liberar suas fotos com Inteligência Artificial.
+          </p>
+        </div>
+
+        <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4 max-w-sm mx-4 text-left">
+          <span class="text-blue-700 text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5 mb-1">
+            <i class="fa-solid fa-circle-info"></i> Como funciona?
+          </span>
+          <p class="text-[11px] text-blue-600/90 leading-relaxed">
+            Assim que você realiza o pagamento do Pix na Cakto, o banco nos avisa e a nossa IA leva cerca de 10 a 20 segundos para renderizar todos os seus modelos em alta resolução. Não feche esta página!
+          </p>
+        </div>
+      </div>
+
+      <!-- STATE 2: COMPLETED (RESULTS) -->
+      <div id="state-results" class="hidden flex-col space-y-5 py-4">
+        <div class="text-center space-y-1">
+          <div class="inline-flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 mb-2">
+            <i class="fa-solid fa-circle-check text-xl animate-bounce"></i>
+          </div>
+          <h2 class="text-xl font-black text-slate-800 leading-tight">Fotos Geradas com Sucesso! 🎉</h2>
+          <p class="text-xs text-slate-500 max-w-xs mx-auto">
+            Abaixo estão as suas fotos exclusivas ao lado do seu candidato. Clique nos botões para baixar!
+          </p>
+        </div>
+
+        <!-- Rendered Grid -->
+        <div id="images-container" class="space-y-4">
+          <!-- Image Cards render here dynamically -->
+        </div>
+
+        <div class="pt-4 text-center">
+          <p class="text-[11px] text-slate-400">
+            Enviamos também uma cópia segura dos links para o seu e-mail cadastrado.
+          </p>
+        </div>
+      </div>
+
+      <!-- STATE 3: ERROR / NOT FOUND -->
+      <div id="state-error" class="hidden flex-col items-center justify-center text-center space-y-4 py-12">
+        <div class="h-16 w-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-2xl">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <div class="space-y-1">
+          <h2 class="text-lg font-bold text-slate-800">Nenhuma foto encontrada</h2>
+          <p class="text-xs text-slate-500 max-w-xs leading-relaxed">
+            Não conseguimos localizar o código desse pedido. Se você acabou de realizar o pagamento, aguarde alguns instantes ou verifique seu e-mail.
+          </p>
+        </div>
+        <a href="index.html" class="bg-slate-900 text-white font-bold px-6 py-2.5 rounded-full text-xs hover:bg-slate-800 transition-all">
+          Voltar ao Início
+        </a>
+      </div>
+
+    </main>
+
+  </div>
+
+  <script>
+    // Supabase config (populated with user's keys)
+    const SUPABASE_URL = "https://gnlfponjvwrdeyimgjzb.supabase.co"; 
+    const SUPABASE_ANON_KEY = "sb_publishable_F6rQKKc5-d3PGhezyRAmXQ_eaSwjJ49"; 
+    
+    let supabaseClient = null;
+    let selfieId = "";
+    let checkInterval = null;
+
+    // Get selfie ID from URL parameters (?src=ID or ?external_id=ID)
+    function getQueryParam(param) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(param);
+    }
+
+    async function init() {
+      // Setup Supabase
+      try {
+        if (typeof supabase !== 'undefined') {
+          supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+      } catch (e) {
+        console.error("Erro ao inicializar Supabase:", e);
+      }
+
+      selfieId = getQueryParam('src') || getQueryParam('external_id') || getQueryParam('utm_campaign');
+
+      if (!selfieId || !supabaseClient) {
+        showState('error');
+        return;
+      }
+
+      // Start polling database
+      showState('loading');
+      checkStatus();
+      checkInterval = setInterval(checkStatus, 3000);
+    }
+
+    async function checkStatus() {
+      try {
+        const { data, error } = await supabaseClient
+          .from('selfies')
+          .select('*')
+          .eq('id', selfieId)
+          .single();
+
+        if (error || !data) {
+          console.error("Erro ou registro não encontrado:", error);
+          return; // Continue polling in case it was just created
+        }
+
+        const status = data.status;
+        const candidate = data.candidate;
+        
+        // Setup theme colors based on candidate
+        updateThemeColors(candidate);
+
+        if (status === 'pending') {
+          document.getElementById('loader-title').innerText = "Aguardando Pagamento...";
+          document.getElementById('loader-text').innerText = "Identificamos seu pedido! Assim que o Pix for pago, suas fotos serão geradas na hora.";
+        } else if (status === 'paid') {
+          document.getElementById('loader-title').innerText = "Criando suas fotos de campanha...";
+          document.getElementById('loader-text').innerText = "Pagamento aprovado! Nossa Inteligência Artificial está recortando e aplicando as fotos nos cenários oficiais (10 a 20 segundos)...";
+        } else if (status === 'completed') {
+          clearInterval(checkInterval);
+          renderResults(data);
+          showState('results');
+        } else if (status === 'failed') {
+          clearInterval(checkInterval);
+          document.getElementById('loader-title').innerText = "Falha na geração das fotos";
+          document.getElementById('loader-text').innerText = "Desculpe, ocorreu um erro de processamento da Inteligência Artificial. Por favor, entre em contato com o suporte.";
+        }
+      } catch (err) {
+        console.error("Erro na verificação de status:", err);
+      }
+    }
+
+    function updateThemeColors(candidate) {
+      const badge = document.getElementById('candidate-badge');
+      const progressBar = document.getElementById('top-progress-bar');
+      
+      badge.classList.remove('hidden');
+      if (candidate === 'lula') {
+        badge.innerText = "LULA 🔴";
+        badge.className = "text-xs font-semibold px-2.5 py-1 rounded-full text-white bg-team-red";
+        progressBar.className = "h-full bg-team-red transition-all duration-500 ease-out";
+      } else {
+        badge.innerText = "BOLSONARO 💚";
+        badge.className = "text-xs font-semibold px-2.5 py-1 rounded-full text-white bg-team-green";
+        progressBar.className = "h-full bg-team-green transition-all duration-500 ease-out";
+      }
+    }
+
+    function renderResults(data) {
+      const container = document.getElementById('images-container');
+      container.innerHTML = "";
+
+      const resultUrls = data.result_url ? data.result_url.split(',') : [];
+      const candidateName = data.candidate === 'lula' ? 'Lula' : 'Bolsonaro';
+      const themeBgClass = data.candidate === 'lula' ? 'bg-team-red' : 'bg-team-green';
+
+      if (resultUrls.length === 0) {
+        container.innerHTML = `<p class="text-xs text-center text-slate-500">Erro: Nenhuma imagem encontrada no registro.</p>`;
+        return;
+      }
+
+      resultUrls.forEach((url, index) => {
+        const card = document.createElement('div');
+        card.className = "bg-white border border-slate-200 rounded-2xl p-3 shadow-card flex flex-col items-center space-y-3";
+        
+        card.innerHTML = `
+          <div class="relative w-full aspect-square rounded-xl overflow-hidden bg-slate-100 border border-slate-100 flex items-center justify-center">
+            <img src="${url}" alt="Foto ${index + 1}" class="w-full h-full object-cover">
+          </div>
+          <a href="${url}" download="campanha-${data.candidate}-${index + 1}.jpg" target="_blank" class="w-full text-center ${themeBgClass} text-white font-extrabold py-3 px-6 rounded-full text-xs shadow-md hover:brightness-95 transition-all flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-cloud-arrow-down"></i> Baixar Foto #${index + 1}
+          </a>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function showState(state) {
+      ['state-loading', 'state-results', 'state-error'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+      });
+      document.getElementById(`state-${state}`).classList.remove('hidden');
+      
+      const main = document.querySelector('main');
+      if (state === 'results') {
+        main.classList.remove('justify-center');
+      } else {
+        main.classList.add('justify-center');
+      }
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>

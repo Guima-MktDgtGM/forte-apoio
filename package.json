@@ -1,0 +1,16 @@
+{
+  "name": "forte-apoio-funnel",
+  "version": "1.0.0",
+  "description": "Funil IA de fotos de campanha política integrado com Vercel, Supabase, Cakto e Replicate.",
+  "main": "api/webhook.js",
+  "scripts": {
+    "start": "node api/webhook.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.8",
+    "replicate": "^0.28.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

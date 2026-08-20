@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FotoNaCampanha — Sua Foto por IA</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'team-red': '#dc2626',      /* Lula Red */
+            'team-green': '#16a34a',    /* Bolsonaro Green */
+            'bg-election': '#f8fafc'
+          },
+          boxShadow: {
+            'card': '0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 8px -1px rgba(0, 0, 0, 0.02)',
+            'elevated': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Supabase Client SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Custom CSS for animations -->
+  <style>
+    @keyframes pulse-slow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .6; transform: scale(1.015); }
+    }
+    .animate-pulse-slow {
+      animation: pulse-slow 2s infinite ease-in-out;
+    }
+    
+    @keyframes float-up {
+      0% { opacity: 0; transform: translateY(0) scale(0.8); }
+      20% { opacity: 1; transform: translateY(-10px) scale(1.1); }
+      100% { opacity: 0; transform: translateY(-30px) scale(0.9); }
+    }
+    .animate-float-up {
+      animation: float-up 1.8s forwards ease-out;
+    }
+
+    .fade-enter {
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    }
+    .fade-enter-active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #quiz-lula-area, #quiz-bolsonaro-area {
+      transition: clip-path 0.4s cubic-bezier(0.25, 1, 0.5, 1), filter 0.4s ease;
+    }
+
+    /* Repeating CSS Watermark Overlay */
+    .watermark-pattern {
+      background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(220, 38, 38, 0.25),
+        rgba(220, 38, 38, 0.25) 15px,
+        transparent 15px,
+        transparent 35px
+      );
+    }
+    
+    .watermark-text-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(5, 1fr);
+      gap: 15px;
+      transform: rotate(-25deg) scale(1.3);
+      transform-origin: center;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 h-full flex flex-col items-center justify-center font-sans antialiased">
+
+  <!-- Mobile-first container -->
+  <div class="relative flex h-full w-full flex-col overflow-hidden bg-white md:my-4 md:h-[calc(100%-2rem)] md:max-w-[480px] md:rounded-2xl md:border md:border-slate-200 md:shadow-elevated">
+    
+    <!-- HEADER -->
+    <header class="bg-white border-b border-slate-200 px-5 py-4 flex-shrink-0 flex items-center justify-between z-10">
+      <div class="flex items-center gap-2">
+        <div class="h-8 w-8 rounded-full bg-slate-900 flex items-center justify-center text-white">
+          <i class="fa-solid fa-camera text-sm"></i>
+        </div>
+        <span class="font-extrabold text-slate-800 text-lg tracking-tight">FotoNaCampanha</span>
+      </div>
+      <div id="header-badge" class="hidden text-xs font-semibold px-2.5 py-1 rounded-full text-white bg-slate-400">
+        <!-- Candidate badge shows here -->
+      </div>
+    </header>
+
+    <!-- PROGRESS BAR AT THE TOP OF FUNNEL -->
+    <div class="h-1.5 w-full bg-slate-100 flex-shrink-0 relative overflow-hidden">
+      <div id="top-progress-bar" class="h-full bg-team-red transition-all duration-500 ease-out" style="width: 0%;"></div>
+    </div>
+
+    <!-- MAIN INTERACTIVE CONTAINER -->
+    <main class="flex-1 overflow-y-auto bg-slate-50 flex flex-col relative">
+      
+      <!-- SCREEN 0: PREMIUM DIAGONAL SPLIT QUIZ -->
+      <div id="screen-quiz" class="absolute inset-0 z-20 flex flex-col justify-between overflow-hidden">
+        
+        <!-- Lula Side (Left Diagonal) -->
+        <div id="quiz-lula-area" class="absolute top-0 left-0 w-full h-full bg-cover bg-center filter brightness-[0.45]" style="background-image: url('imagens/foto lula inicio.jpg'); clip-path: polygon(0 0, 54% 0, 46% 100%, 0 100%);">
+          <!-- Lula text layer -->
+          <div class="absolute bottom-16 left-8 text-left z-30">
+            <span class="text-[11px] font-black tracking-widest text-red-500 bg-red-950/90 px-3 py-1 rounded-full uppercase font-display">Lado Vermelho</span>
+            <h2 class="text-3xl font-black text-white mt-2 drop-shadow-md">LULA 🔴</h2>
+            <p class="text-xs text-slate-300 mt-1 leading-snug drop-shadow-sm max-w-[150px]">Apoie e tire fotos com Lula</p>
+          </div>
+        </div>
+
+        <!-- Bolsonaro Side (Right Diagonal) -->
+        <div id="quiz-bolsonaro-area" class="absolute top-0 left-0 w-full h-full bg-cover bg-center filter brightness-[0.45]" style="background-image: url('imagens/foto bolsonaro inicio.jpg'); clip-path: polygon(54% 0, 100% 0, 100% 100%, 46% 100%);">
+          <!-- Bolsonaro text layer -->
+          <div class="absolute bottom-16 right-8 text-right z-30 flex flex-col items-end">
+            <span class="text-[11px] font-black tracking-widest text-green-400 bg-green-950/90 px-3 py-1 rounded-full uppercase font-display">Lado Verde-Amarelo</span>
+            <h2 class="text-3xl font-black text-white mt-2 drop-shadow-md">BOLSONARO 💚</h2>
+            <p class="text-xs text-slate-300 mt-1 leading-snug drop-shadow-sm max-w-[150px] text-right">Apoie e tire fotos com Bolsonaro</p>
+          </div>
+        </div>
+
+        <!-- Float Glassmorphic Central Title -->
+        <div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] text-center z-30 pointer-events-none">
+          <div class="bg-slate-950/80 backdrop-blur-md text-white rounded-3xl p-5 border border-white/10 shadow-elevated">
+            <span class="text-slate-400 text-[10px] font-black tracking-wider uppercase">🗳️ Pesquisa de Opinião Oficial</span>
+            <h1 class="text-xl font-extrabold mt-1 leading-tight text-white font-display">Quem você apoia para a presidência do Brasil?</h1>
+            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed font-medium">
+              Toque no seu lado para ver a mensagem do seu leader e gerar sua foto com IA.
+            </p>
+          </div>
+        </div>
+
+        <!-- Transparent Hitboxes (z-index 40, side-by-side, no overlap) -->
+        <div id="hitbox-lula" onclick="answerQuiz('lula')" class="absolute top-0 left-0 w-1/2 h-full z-40 cursor-pointer"></div>
+        <div id="hitbox-bolsonaro" onclick="answerQuiz('bolsonaro')" class="absolute top-0 right-0 w-1/2 h-full z-40 cursor-pointer"></div>
+      </div>
+
+      <!-- SCREEN 1: CANDIDATE FLOW (Toggles sections dynamically) -->
+      <div id="screen-candidate-flow" class="hidden flex-1 flex flex-col p-5">
+        
+        <!-- Header Controls (Pills only - Centered) -->
+        <div class="flex items-center justify-center mb-4 flex-shrink-0 w-full">
+          <div class="flex gap-2 w-[240px]">
+            <button onclick="switchCandidatePill('lula')" id="pill-lula" class="flex-1 py-1.5 px-2 rounded-lg border font-bold text-xs flex items-center justify-center gap-1 transition-all">
+              <span>🔴</span> Lula
+            </button>
+            <button onclick="switchCandidatePill('bolsonaro')" id="pill-bolsonaro" class="flex-1 py-1.5 px-2 rounded-lg border font-bold text-xs flex items-center justify-center gap-1 transition-all">
+              <span>💚</span> Bolsonaro
+            </button>
+          </div>
+        </div>
+
+        <!-- 1. VIDEO SECTION (Awaiting Video View) -->
+        <div id="section-video" class="flex flex-col flex-1">
+          <div class="text-center mb-4">
+            <h2 class="text-xl font-black text-slate-800 font-display">Mensagem Importante</h2>
+            <p class="text-xs text-slate-500 mt-1">
+              Assista ao vídeo abaixo para entender a importância do seu apoio.
+            </p>
+          </div>
+
+          <!-- Video Player -->
+          <div class="bg-white rounded-2xl border border-slate-200 p-2.5 shadow-sm mb-5">
+            <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-950">
+              <video id="campaign-video" class="w-full h-full object-cover" controls preload="auto" poster="imagens/foto lula inicio.jpg">
+                <source id="video-source" src="videos/lula.mp4" type="video/mp4">
+                Seu navegador não suporta vídeos.
+              </video>
+              <div class="absolute top-2 left-2 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
+                <span id="video-badge-emoji">🔴</span> <span id="video-badge-name">Lula</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Explanatory text -->
+          <div class="bg-slate-100/80 rounded-xl p-4 border border-slate-200/50 mb-6">
+            <p class="text-xs text-slate-600 leading-relaxed">
+              <strong class="text-slate-800">Participe do financiamento coletivo oficial:</strong> Ao gerar sua foto realista com Inteligência Artificial, todo o valor líquido arrecadado é destinado como doação de apoio à campanha eleitoral.
+            </p>
+          </div>
+
+          <!-- PLACAR AO VIVO (Clean Progress Bar inside Video Screen) -->
+          <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm mb-5 relative overflow-hidden">
+            <div class="flex items-center justify-between text-xs font-bold mb-1.5">
+              <span class="text-team-red flex items-center gap-1 relative font-extrabold text-[13px]">
+                Lula · <span id="lula-votes" class="tabular-nums">64.128</span>
+                <span id="lula-float" class="absolute -top-4 right-0 font-bold text-team-red text-xs opacity-0"></span>
+              </span>
+              <span class="text-slate-400 font-medium text-[9px] flex items-center gap-1">
+                <span class="relative flex h-1.5 w-1.5">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                </span>
+                Placar ao vivo
+              </span>
+              <span class="text-team-green flex items-center gap-1 relative font-extrabold text-[13px]">
+                <span id="bolsonaro-float" class="absolute -top-4 left-0 font-bold text-team-green text-xs opacity-0"></span>
+                <span id="bolsonaro-votes" class="tabular-nums">58.913</span> · Bolsonaro
+              </span>
+            </div>
+            
+            <!-- Clean Progress Bar -->
+            <div class="h-2.5 w-full rounded-full overflow-hidden flex bg-slate-100">
+              <div id="lula-bar" class="h-full bg-team-red transition-all duration-700" style="width: 52%;"></div>
+              <div id="bolsonaro-bar" class="h-full bg-team-green transition-all duration-700" style="width: 48%;"></div>
+            </div>
+            
+            <div class="flex justify-between text-[9px] text-slate-400 mt-1 font-semibold">
+              <span id="lula-percent">52.1%</span>
+              <span id="total-votes">123.041 fotos</span>
+              <span id="bolsonaro-percent">47.9%</span>
+            </div>
+            
+            <p class="text-center text-[8px] text-slate-400 mt-1.5 font-medium">
+              Atualizado em <span id="update-date">20 de agosto de 2026</span> às <span id="update-time" class="tabular-nums font-bold text-slate-500">15:14:10</span> (horário de Brasília)
+            </p>
+          </div>
+
+          <div class="mt-auto">
+            <button onclick="confirmVideoApoio()" id="btn-video-confirm" class="w-full text-white font-extrabold py-4 px-6 rounded-full text-base transition-all shadow-md hover:brightness-95 flex items-center justify-center gap-2">
+              Apoiar Lula e Tirar Foto
+              <i class="fa-solid fa-arrow-right text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. UPLOAD SECTION (Awaiting Selfie) -->
+        <div id="section-upload" class="hidden flex-1 flex flex-col">
+          <div class="text-center mb-4">
+            <h2 class="text-xl font-black text-slate-800 font-display">Foto com <span id="upload-title-candidate">Lula</span></h2>
+            <p class="text-xs text-slate-500 mt-1 leading-snug">
+              Envie sua selfie e receba uma **foto sua ao lado de <span id="upload-desc-candidate">Lula</span>**. Cada foto comprada vale 1 ponto para o candidato.
+            </p>
+            <p class="text-[10px] text-slate-400 mt-1.5 font-medium">
+              4 etapas &nbsp;•&nbsp; ~2 min &nbsp;•&nbsp; A partir de R$ 15,90
+            </p>
+          </div>
+
+          <!-- Two Side-by-Side Example Cards -->
+          <div class="grid grid-cols-2 gap-3.5 mb-4">
+            <!-- Left: User Selfie Instruction -->
+            <div class="flex flex-col">
+              <span class="text-[10px] font-black text-slate-400 text-center uppercase mb-1">Sua Selfie</span>
+              <div class="aspect-[3/4] rounded-2xl overflow-hidden bg-slate-200 relative border border-slate-200 shadow-sm">
+                <img src="imagens/exemplo selfie correta.png" alt="Sua Selfie" class="w-full h-full object-cover">
+                <div class="absolute inset-x-0 bottom-3 px-1.5">
+                  <div class="bg-black/85 text-white text-[8px] font-extrabold py-1 px-0.5 rounded text-center tracking-tight leading-none uppercase">
+                    Envie sua selfie assim
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: AI Output Mockup -->
+            <div class="flex flex-col">
+              <span id="example-ai-side-label" class="text-[10px] font-black text-slate-400 text-center uppercase mb-1">✨ Com Lula</span>
+              <div class="aspect-[3/4] rounded-2xl overflow-hidden bg-slate-200 relative border border-slate-200 shadow-sm">
+                <img id="img-upload-candidate-example" src="imagens/exemplo-lula-1.jpg" alt="Exemplo" class="w-full h-full object-cover">
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-center gap-4 text-[10px] text-slate-400 mb-4 font-semibold">
+            <span><i class="fa-solid fa-shield-halved"></i> 100% privado</span>
+            <span><i class="fa-solid fa-bolt"></i> Resultado rápido</span>
+          </div>
+
+          <!-- File Upload Card Area -->
+          <div id="upload-box" class="bg-white rounded-2xl border border-slate-200 hover:border-slate-400 transition-colors p-5 flex flex-col items-center justify-center gap-3 text-center cursor-pointer relative shadow-sm min-h-[110px]">
+            <input type="file" id="file-input" class="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onchange="handleFileSelect(event)">
+            
+            <div id="upload-state-empty" class="flex flex-col items-center">
+              <div class="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 mb-1">
+                <i class="fa-solid fa-image text-lg"></i>
+              </div>
+              <span class="text-xs font-black text-slate-800">Toque para selecionar sua foto</span>
+              <span class="text-[9px] text-slate-400">JPG, PNG ou WEBP &nbsp;•&nbsp; Máx. 10MB</span>
+            </div>
+
+            <div id="upload-state-preview" class="hidden w-full flex items-center justify-between px-3">
+              <div class="flex items-center gap-3">
+                <div class="h-12 w-12 rounded-xl overflow-hidden shadow-sm">
+                  <img id="img-preview" src="#" alt="Selfie Carregada" class="h-full w-full object-cover">
+                </div>
+                <div class="text-left">
+                  <p class="text-xs font-bold text-slate-800">Sua foto selecionada</p>
+                  <span class="text-[10px] text-emerald-600 font-extrabold flex items-center gap-0.5"><i class="fa-solid fa-circle-check"></i> Pronta</span>
+                </div>
+              </div>
+              <button onclick="clearUpload(event)" class="bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors">
+                Alterar
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-auto pt-4">
+            <button onclick="startAiProcessing()" id="btn-upload-next" disabled class="w-full bg-slate-200 text-slate-400 font-extrabold py-4 px-6 rounded-full text-sm cursor-not-allowed flex items-center justify-center gap-2">
+              Avançar para ver o resultado
+              <i class="fa-solid fa-arrow-right text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. PROCESSING SCREEN (media_1787256349948.png layout) -->
+        <div id="section-processing" class="hidden flex-1 flex flex-col items-center justify-center text-center py-6">
+          <!-- Blurred Selfie Container with targets icon -->
+          <div class="relative h-44 w-32 rounded-2xl overflow-hidden shadow-elevated bg-slate-800 mb-6">
+            <img id="processing-selfie-preview" src="#" class="w-full h-full object-cover filter blur-[3px] opacity-75">
+            <!-- Central Scanning Target Icon -->
+            <div class="absolute inset-0 flex items-center justify-center z-10">
+              <div class="h-12 w-12 rounded-full border border-red-500/80 bg-red-950/40 flex items-center justify-center text-red-500 animate-pulse">
+                <i class="fa-solid fa-circle-notch animate-spin text-lg"></i>
+              </div>
+            </div>
+            <!-- Horizontal scanning laser line -->
+            <div class="absolute left-0 w-full h-[2px] bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-bounce z-10" style="animation-duration: 2.2s;"></div>
+          </div>
+
+          <h3 class="text-lg font-black text-slate-800 font-display">Criando sua foto com <span id="processing-candidate-name">Lula</span>...</h3>
+          
+          <!-- Large flat animated progress bar -->
+          <div class="w-full max-w-[280px] h-3 bg-slate-100 rounded-full overflow-hidden mt-4 mb-3">
+            <div id="processing-progress-bar" class="h-full bg-team-red transition-all duration-300 ease-out" style="width: 0%;"></div>
+          </div>
+
+          <!-- Dynamic Status Messages with ticking checkmark -->
+          <div class="flex items-center justify-center gap-2 text-xs text-slate-600 font-bold min-h-[30px] my-3">
+            <i class="fa-regular fa-circle-check text-emerald-500 text-sm"></i>
+            <span id="processing-status-msg">Enviando selfie...</span>
+          </div>
+
+          <!-- Social Proof Testimonial Carousel Box -->
+          <div class="w-full max-w-[340px] bg-slate-100/80 border border-slate-200/50 rounded-2xl p-4 mt-6">
+            <div class="flex flex-col items-center">
+              <span id="processing-testimonial-text" class="text-xs text-slate-600 italic font-medium leading-relaxed">
+                "Ninguém acreditou que era montagem"
+              </span>
+              <span id="processing-testimonial-author" class="text-[10px] text-slate-400 font-bold mt-2">
+                — Carlos, BH
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. RESULT SCREEN (media_1787256392195.png layout with watermark) -->
+        <div id="section-result" class="hidden flex-1 flex flex-col">
+          
+          <!-- Urgency Countdown Header Box -->
+          <div class="bg-red-50 border border-red-200 rounded-2xl py-2.5 px-4 mb-4 flex items-center justify-between text-xs text-red-700 font-bold">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle-exclamation text-red-500"></i> Oferta expira em <span id="timer-countdown" class="tabular-nums">15:00</span></span>
+            <span class="text-slate-400">•</span>
+            <span class="flex items-center gap-1 text-[11px]"><i class="fa-solid fa-users text-slate-400"></i> <span class="tabular-nums">47</span> vendo agora</span>
+          </div>
+
+          <div class="text-center mb-4">
+            <h2 class="text-xl font-black text-slate-800 font-display">Sua foto com <span id="result-title-candidate">Lula</span> ficou pronta! 📸</h2>
+            <p class="text-xs text-slate-500 mt-1 leading-snug">
+              Escolha o plano e receba as fotos em alta resolução — cada foto soma pontos para o Candidato.
+            </p>
+          </div>
+
+          <!-- Placar Compact indicator -->
+          <div class="flex items-center justify-between text-[11px] font-black px-2 mb-2">
+            <span class="text-team-red">Lula <span id="result-placar-lula">33</span></span>
+            <!-- Miniature color bar -->
+            <div class="h-2 w-[180px] rounded-full overflow-hidden flex bg-slate-100">
+              <div id="result-bar-lula" class="h-full bg-team-red" style="width: 50%;"></div>
+              <div id="result-bar-bolsonaro" class="h-full bg-team-green" style="width: 50%;"></div>
+            </div>
+            <span class="text-team-green"><span id="result-placar-bolsonaro">33</span> Bolsonaro</span>
+          </div>
+
+          <!-- 3 Watermarked Templates grid side-by-side -->
+          <div class="grid grid-cols-3 gap-2 mb-3">
+            
+            <!-- Card 1 -->
+            <div class="flex flex-col rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-sm watermark-container aspect-[3/4]">
+              <!-- Mock Image -->
+              <img id="img-result-card-1" src="imagens/exemplo-lula-1.jpg" class="w-full h-full object-cover filter blur-[1px]">
+              <!-- Repeating text watermark overlay -->
+              <div class="absolute inset-0 watermark-pattern opacity-40 pointer-events-none"></div>
+              <div class="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none select-none">
+                <div class="watermark-text-grid">
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                </div>
+              </div>
+              <!-- Lock Banner Bottom -->
+              <div class="absolute bottom-0 inset-x-0 bg-red-600 py-1 flex items-center justify-center gap-0.5 text-white text-[7px] font-black uppercase">
+                <i class="fa-solid fa-lock text-[6px]"></i> FALTA PAGAR
+              </div>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="flex flex-col rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-sm watermark-container aspect-[3/4]">
+              <img id="img-result-card-2" src="imagens/exemplo-lula-1.jpg" class="w-full h-full object-cover filter blur-[1px] brightness-90">
+              <div class="absolute inset-0 watermark-pattern opacity-40 pointer-events-none"></div>
+              <div class="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none select-none">
+                <div class="watermark-text-grid">
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                </div>
+              </div>
+              <div class="absolute bottom-0 inset-x-0 bg-red-600 py-1 flex items-center justify-center gap-0.5 text-white text-[7px] font-black uppercase">
+                <i class="fa-solid fa-lock text-[6px]"></i> FALTA PAGAR
+              </div>
+            </div>
+
+            <!-- Card 3 -->
+            <div class="flex flex-col rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-sm watermark-container aspect-[3/4]">
+              <img id="img-result-card-3" src="imagens/exemplo-lula-1.jpg" class="w-full h-full object-cover filter blur-[1px] brightness-75">
+              <div class="absolute inset-0 watermark-pattern opacity-40 pointer-events-none"></div>
+              <div class="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none select-none">
+                <div class="watermark-text-grid">
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                  <span class="text-[6px] font-black text-red-600/60 uppercase tracking-tighter">FALTA PAGAR</span>
+                </div>
+              </div>
+              <div class="absolute bottom-0 inset-x-0 bg-red-600 py-1 flex items-center justify-center gap-0.5 text-white text-[7px] font-black uppercase">
+                <i class="fa-solid fa-lock text-[6px]"></i> FALTA PAGAR
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Change selfie link button -->
+          <button onclick="goBackToUploadScreen()" class="self-center flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors font-bold text-xs mb-5">
+            <i class="fa-solid fa-camera"></i> Enviar outra foto
+          </button>
+
+          <!-- Plan lists exactly as in media_1787256392195.png -->
+          <div class="space-y-2 mb-6">
+            
+            <!-- Basic Plan Button -->
+            <button onclick="selectCaktoPlan('basic', 15.90)" id="c-plan-basic" class="w-full flex items-center justify-between p-3.5 bg-white border-2 rounded-2xl text-left transition-all border-slate-200 shadow-sm">
+              <div class="flex items-start gap-2.5">
+                <div class="c-radio h-5 w-5 rounded-full border-2 border-slate-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div class="h-2.5 w-2.5 rounded-full bg-slate-800 opacity-0 transition-opacity"></div>
+                </div>
+                <div>
+                  <p class="text-sm font-extrabold text-slate-800">Voto Único</p>
+                  <div class="flex flex-wrap gap-x-2 text-[10px] text-slate-400 mt-1 font-semibold">
+                    <span class="flex items-center gap-0.5 text-slate-500"><i class="fa-regular fa-circle-check text-emerald-500"></i> 1 foto com candidato</span>
+                    <span class="flex items-center gap-0.5"><i class="fa-regular fa-circle-check text-emerald-500"></i> 1 ponto no placar</span>
+                    <span class="flex items-center gap-0.5"><i class="fa-regular fa-circle-check text-emerald-500"></i> Download HD</span>
+                  </div>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <p class="text-sm font-black text-slate-800">R$ 15,90</p>
+              </div>
+            </button>
+            
+            <!-- Pro Plan Button (Recommended) -->
+            <button onclick="selectCaktoPlan('pro', 17.90)" id="c-plan-pro" class="w-full flex items-center justify-between p-3.5 bg-white border-2 rounded-2xl text-left transition-all border-red-500 ring-2 ring-red-100 relative shadow-sm">
+              <span id="c-recommended-badge" class="absolute -top-2.5 right-4 bg-red-600 text-white text-[8px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider font-display">Mais Escolhido</span>
+              <div class="flex items-start gap-2.5">
+                <div id="c-recommended-radio" class="c-radio h-5 w-5 rounded-full border-2 border-red-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div id="c-recommended-dot" class="h-2.5 w-2.5 rounded-full bg-red-600 transition-opacity"></div>
+                </div>
+                <div>
+                  <p class="text-sm font-extrabold text-slate-800 font-display">Militância</p>
+                  <div class="flex flex-wrap gap-x-2 text-[10px] text-slate-400 mt-1 font-semibold">
+                    <span class="flex items-center gap-0.5 text-slate-500"><i class="fa-regular fa-circle-check text-emerald-500"></i> 3 fotos com candidato</span>
+                    <span class="flex items-center gap-0.5"><i class="fa-regular fa-circle-check text-emerald-500"></i> 3 pontos no placar</span>
+                    <span class="flex items-center gap-0.5"><i class="fa-regular fa-circle-check text-emerald-500"></i> Cenários variados</span>
+                  </div>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <p class="text-sm font-black text-slate-800">R$ 17,90</p>
+              </div>
+            </button>
+            
+            <!-- Enterprise Plan Button -->
+            <button onclick="selectCaktoPlan('enterprise', 19.90)" id="c-plan-enterprise" class="w-full flex items-center justify-between p-3.5 bg-white border-2 rounded-2xl text-left transition-all border-slate-200 shadow-sm">
+              <div class="flex items-start gap-2.5">
+                <div class="c-radio h-5 w-5 rounded-full border-2 border-slate-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div class="h-2.5 w-2.5 rounded-full bg-slate-800 opacity-0 transition-opacity"></div>
+                </div>
+                <div>
+                  <p class="text-sm font-extrabold text-slate-800">Comitê</p>
+                  <div class="flex flex-wrap gap-x-2 text-[10px] text-slate-400 mt-1 font-semibold">
+                    <span class="flex items-center gap-0.5 text-slate-500"><i class="fa-regular fa-circle-check text-emerald-500"></i> 5 fotos com candidato</span>
+                    <span class="flex items-center gap-0.5"><i class="fa-regular fa-circle-check text-emerald-500"></i> 5 pontos no placar</span>
+                    <span class="flex items-center gap-0.5"><i class="fa-regular fa-circle-check text-emerald-500"></i> Todos os cenários</span>
+                  </div>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <p class="text-sm font-black text-slate-800">R$ 19,90</p>
+              </div>
+            </button>
+
+          </div>
+
+          <!-- Bottom stars count -->
+          <div class="flex flex-col items-center justify-center mb-5 gap-1">
+            <div class="flex gap-0.5 text-amber-400 text-xs">
+              <i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i>
+            </div>
+            <span class="text-[10px] text-slate-400 font-bold">4.9/5 — 8.743 avaliações</span>
+          </div>
+
+          <!-- BIG REDIRECT CTA BUTTON -->
+          <div class="mt-auto">
+            <button onclick="redirectToCaktoCheckout()" id="btn-result-checkout" class="w-full bg-red-600 text-white font-extrabold py-4.5 px-6 rounded-full text-base transition-all shadow-md hover:brightness-95 flex items-center justify-center gap-2">
+              Apoiar e Liberar Minhas Fotos
+              <i class="fa-solid fa-arrow-right text-sm"></i>
+            </button>
+            <div class="flex items-center justify-center gap-1.5 text-[9px] text-slate-400 mt-2.5 font-medium">
+              <i class="fa-solid fa-lock"></i> Checkout Seguro e Criptografado
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- INTERACTIVE FUNNEL LOGIC -->
+  <script>
+    // Configurações do Supabase
+    const SUPABASE_URL = "https://gnlfponjvwrdeyimgjzb.supabase.co"; 
+    const SUPABASE_ANON_KEY = "sb_publishable_F6rQKKc5-d3PGhezyRAmXQ_eaSwjJ49"; 
+
+    let supabaseClient = null;
+    try {
+      if (typeof supabase !== 'undefined' && SUPABASE_URL !== "SUA_SUPABASE_URL_AQUI") {
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log("Supabase cliente conectado!");
+      }
+    } catch (e) {
+      console.error("Erro ao conectar ao Supabase:", e);
+    }
+
+    // State Variables
+    let userVote = 'lula'; // Selection from initial split quiz
+    let selectedCandidate = 'lula'; // Selected candidate in the funnel
+    let selectedPlan = 'pro';
+    let selectedPlanPrice = 17.90;
+    let userSelfie = null;
+    let uploadedFileFile = null; // Guardará o arquivo binário selecionado
+    let currentSelfieId = "mock_" + Math.random().toString(36).substring(2, 11);
+    let timerInterval = null;
+
+    // Cakto Links Configurations for each candidate and package
+    const caktoLinks = {
+      lula: {
+        basic: "https://pay.cakto.com.br/LULA-BASICO?src=foto-lula",
+        pro: "https://pay.cakto.com.br/LULA-PRO?src=foto-lula",
+        enterprise: "https://pay.cakto.com.br/LULA-COMITE?src=foto-lula"
+      },
+      bolsonaro: {
+        basic: "https://pay.cakto.com.br/BOLSO-BASICO?src=foto-bolsonaro",
+        pro: "https://pay.cakto.com.br/BOLSO-PRO?src=foto-bolsonaro",
+        enterprise: "https://pay.cakto.com.br/BOLSO-COMITE?src=foto-bolsonaro"
+      }
+    };
+
+    // Placar High Numbers Data
+    const placar = {
+      lula: 64128,
+      bolsonaro: 58913
+    };
+
+    // Feedbacks array shown during processing
+    const processingMessages = [
+      "Enviando selfie...",
+      "Identificando contornos do rosto...",
+      "Alinhando ângulo tridimensional...",
+      "Misturando tons de pele com o candidato...",
+      "Ajustando iluminação do cenário...",
+      "Finalizando renderização em alta definição..."
+    ];
+
+    // Social Proof Testimonial Carousel List
+    const testimonials = [
+      { text: '"Ninguém acreditou que era montagem!"', author: "— Carlos, BH" },
+      { text: '"Ficou extremamente realista! Mandei no grupo da família e todos piraram."', author: "— Marcos, SP" },
+      { text: '"Vale muito a pena, pareço estar do lado dele na passeata!"', author: "— Amanda, RJ" },
+      { text: '"Gerei minhas 3 fotos e já botei de foto de perfil no WhatsApp!"', author: "— Roberto, DF" }
+    ];
+
+    // Hover Expansion Logic for the Diagonal Split (Screen 0)
+    const lulaArea = document.getElementById('quiz-lula-area');
+    const bolsonaroArea = document.getElementById('quiz-bolsonaro-area');
+    const hitboxLula = document.getElementById('hitbox-lula');
+    const hitboxBolsonaro = document.getElementById('hitbox-bolsonaro');
+
+    hitboxLula.addEventListener('mouseenter', () => {
+      lulaArea.style.clipPath = 'polygon(0 0, 62% 0, 52% 100%, 0 100%)';
+      bolsonaroArea.style.clipPath = 'polygon(62% 0, 100% 0, 100% 100%, 52% 100%)';
+      lulaArea.style.filter = 'brightness(0.70)';
+      bolsonaroArea.style.filter = 'brightness(0.30)';
+    });
+
+    hitboxLula.addEventListener('mouseleave', resetSplit);
+
+    hitboxBolsonaro.addEventListener('mouseenter', () => {
+      lulaArea.style.clipPath = 'polygon(0 0, 46% 0, 38% 100%, 0 100%)';
+      bolsonaroArea.style.clipPath = 'polygon(46% 0, 100% 0, 100% 100%, 38% 100%)';
+      lulaArea.style.filter = 'brightness(0.30)';
+      bolsonaroArea.style.filter = 'brightness(0.70)';
+    });
+
+    hitboxBolsonaro.addEventListener('mouseleave', resetSplit);
+
+    function resetSplit() {
+      lulaArea.style.clipPath = 'polygon(0 0, 54% 0, 46% 100%, 0 100%)';
+      bolsonaroArea.style.clipPath = 'polygon(54% 0, 100% 0, 100% 100%, 46% 100%)';
+      lulaArea.style.filter = 'brightness(0.45)';
+      bolsonaroArea.style.filter = 'brightness(0.45)';
+    }
+
+    // Ticking Clock in real-time
+    function tickClock() {
+      const dateOptions = { day: 'numeric', month: 'long', year: 'numeric' };
+      const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+      
+      const now = new Date();
+      document.getElementById('update-date').innerText = now.toLocaleDateString('pt-BR', dateOptions);
+      document.getElementById('update-time').innerText = now.toLocaleTimeString('pt-BR', timeOptions);
+    }
+    
+    // Start Ticking Clock
+    setInterval(tickClock, 1000);
+    tickClock(); // Run immediately
+
+    function updateScoreboard() {
+      const total = placar.lula + placar.bolsonaro;
+      const lulaPercent = ((placar.lula / total) * 100).toFixed(1);
+      const bolsonaroPercent = (100 - lulaPercent).toFixed(1);
+
+      document.getElementById('lula-votes').innerText = placar.lula.toLocaleString('pt-BR');
+      document.getElementById('bolsonaro-votes').innerText = placar.bolsonaro.toLocaleString('pt-BR');
+      document.getElementById('lula-percent').innerText = `${lulaPercent}%`;
+      document.getElementById('bolsonaro-percent').innerText = `${bolsonaroPercent}%`;
+      document.getElementById('total-votes').innerText = `${total.toLocaleString('pt-BR')} fotos`;
+
+      document.getElementById('lula-bar').style.width = `${lulaPercent}%`;
+      document.getElementById('bolsonaro-bar').style.width = `${bolsonaroPercent}%`;
+      
+      // Update result compact dispute indicators
+      document.getElementById('result-placar-lula').innerText = placar.lula.toLocaleString('pt-BR');
+      document.getElementById('result-placar-bolsonaro').innerText = placar.bolsonaro.toLocaleString('pt-BR');
+      document.getElementById('result-bar-lula').style.width = `${lulaPercent}%`;
+      document.getElementById('result-bar-bolsonaro').style.width = `${bolsonaroPercent}%`;
+    }
+
+    // Live updates interval
+    setInterval(() => {
+      if (document.getElementById('screen-candidate-flow').classList.contains('hidden')) return;
+      if (document.getElementById('section-video').classList.contains('hidden')) return;
+
+      if (Math.random() > 0.35) {
+        let side = 'lula';
+        if (userVote === 'lula') {
+          side = Math.random() < 0.8 ? 'lula' : 'bolsonaro';
+        } else {
+          side = Math.random() < 0.8 ? 'bolsonaro' : 'lula';
+        }
+
+        const points = [1, 3, 5][Math.floor(Math.random() * 3)];
+        
+        placar[side] += points;
+        updateScoreboard();
+
+        // Trigger floating vote count indicator
+        const floatSpan = document.getElementById(`${side}-float`);
+        floatSpan.innerText = `+${points}`;
+        
+        if (side === 'lula') {
+          floatSpan.className = "absolute -top-4 right-0 font-bold text-team-red text-xs opacity-100 animate-float-up";
+        } else {
+          floatSpan.className = "absolute -top-4 left-0 font-bold text-team-green text-xs opacity-100 animate-float-up";
+        }
+        
+        setTimeout(() => {
+          floatSpan.classList.remove('animate-float-up');
+          floatSpan.classList.add('opacity-0');
+        }, 1800);
+      }
+    }, 4500);
+
+    // Initial setup of bias numbers
+    function configureBias() {
+      if (userVote === 'lula') {
+        placar.lula = 64831;
+        placar.bolsonaro = 58102;
+      } else {
+        placar.lula = 57403;
+        placar.bolsonaro = 65492;
+      }
+      updateScoreboard();
+    }
+
+    // Answer Quiz Screen
+    function answerQuiz(candidate) {
+      userVote = candidate;
+      selectedCandidate = candidate; // Pre-select in the funnel
+
+      configureBias();
+      setupCandidateTheme(candidate);
+
+      document.getElementById('screen-quiz').classList.add('hidden');
+      
+      const flowScreen = document.getElementById('screen-candidate-flow');
+      flowScreen.classList.remove('hidden');
+      
+      showFlowSection('video');
+      updateTopProgress(20);
+
+      flowScreen.classList.add('fade-enter');
+      setTimeout(() => {
+        flowScreen.classList.add('fade-enter-active');
+      }, 50);
+    }
+
+    function goBackToQuiz() {
+      document.getElementById('campaign-video').pause();
+      
+      document.getElementById('screen-candidate-flow').classList.add('hidden');
+      document.getElementById('screen-quiz').classList.remove('hidden');
+      updateTopProgress(0);
+      document.getElementById('header-badge').classList.add('hidden');
+    }
+
+    // Setup Candidate Theme, Videos & Elements
+    function setupCandidateTheme(candidate) {
+      const video = document.getElementById('campaign-video');
+      const videoSource = document.getElementById('video-source');
+      const confirmBtn = document.getElementById('btn-video-confirm');
+      const badgeEmoji = document.getElementById('video-badge-emoji');
+      const badgeName = document.getElementById('video-badge-name');
+      
+      // Pills setup
+      const pillLula = document.getElementById('pill-lula');
+      const pillBolsonaro = document.getElementById('pill-bolsonaro');
+
+      if (candidate === 'lula') {
+        videoSource.src = "videos/lula.mp4";
+        video.poster = "imagens/foto lula inicio.jpg";
+        
+        confirmBtn.innerText = "Apoiar Lula e Tirar Foto";
+        confirmBtn.className = "w-full bg-team-red text-white font-extrabold py-4 px-6 rounded-full text-base transition-all shadow-md hover:brightness-95 flex items-center justify-center gap-2";
+        
+        badgeEmoji.innerText = "🔴";
+        badgeName.innerText = "Lula";
+        
+        pillLula.className = "flex-1 py-1.5 px-2 rounded-lg border-2 border-team-red bg-red-50 text-team-red font-bold text-xs flex items-center justify-center gap-1 transition-all shadow-sm";
+        pillBolsonaro.className = "flex-1 py-1.5 px-2 rounded-lg border border-slate-200 bg-white text-slate-400 font-medium text-xs flex items-center justify-center gap-1 transition-all opacity-60";
+      } else {
+        videoSource.src = "videos/bolsonaro.mp4";
+        video.poster = "imagens/foto bolsonaro inicio.jpg";
+        
+        confirmBtn.innerText = "Apoiar Bolsonaro e Tirar Foto";
+        confirmBtn.className = "w-full bg-team-green text-white font-extrabold py-4 px-6 rounded-full text-base transition-all shadow-md hover:brightness-95 flex items-center justify-center gap-2";
+        
+        badgeEmoji.innerText = "💚";
+        badgeName.innerText = "Bolsonaro";
+        
+        pillLula.className = "flex-1 py-1.5 px-2 rounded-lg border border-slate-200 bg-white text-slate-400 font-medium text-xs flex items-center justify-center gap-1 transition-all opacity-60";
+        pillBolsonaro.className = "flex-1 py-1.5 px-2 rounded-lg border-2 border-team-green bg-green-50 text-team-green font-bold text-xs flex items-center justify-center gap-1 transition-all shadow-sm";
+      }
+
+      video.load();
+      
+      // Update header badge
+      const headerBadge = document.getElementById('header-badge');
+      headerBadge.classList.remove('hidden');
+      if (candidate === 'lula') {
+        headerBadge.innerText = '🔴 Lula';
+        headerBadge.className = 'text-xs font-bold px-2.5 py-1 rounded-full text-white bg-team-red';
+      } else {
+        headerBadge.innerText = '💚 Bolsonaro';
+        headerBadge.className = 'text-xs font-bold px-2.5 py-1 rounded-full text-white bg-team-green';
+      }
+    }
+
+    // Toggle Pills directly on the flow screen
+    function switchCandidatePill(candidate) {
+      if (candidate === selectedCandidate) return;
+      
+      userVote = candidate;
+      selectedCandidate = candidate;
+      
+      configureBias();
+      setupCandidateTheme(candidate);
+      
+      if (!document.getElementById('section-upload').classList.contains('hidden')) {
+        selectUploadPill(candidate);
+      }
+    }
+
+    // Confirm video and HIDE it, showing only the bottom upload section
+    function confirmVideoApoio() {
+      document.getElementById('campaign-video').pause();
+      
+      showFlowSection('upload');
+      updateTopProgress(40);
+      selectUploadPill(selectedCandidate);
+    }
+
+    // Sub-section visibility controller inside the flow screen
+    function showFlowSection(sectionName) {
+      ['video', 'upload', 'processing', 'result'].forEach(id => {
+        document.getElementById(`section-${id}`).classList.add('hidden');
+      });
+      document.getElementById(`section-${sectionName}`).classList.remove('hidden');
+    }
+
+    // Top Progress Bar controller
+    function updateTopProgress(percent) {
+      const bar = document.getElementById('top-progress-bar');
+      bar.style.width = `${percent}%`;
+      
+      if (selectedCandidate === 'lula') {
+        bar.classList.remove('bg-team-green');
+        bar.classList.add('bg-team-red');
+      } else {
+        bar.classList.remove('bg-team-red');
+        bar.classList.add('bg-team-green');
+      }
+    }
+
+    // Trigger Upload pills logic (updates textures of cards)
+    function selectUploadPill(candidate) {
+      selectedCandidate = candidate;
+      setupCandidateTheme(candidate); // synchronize top pills
+
+      const titleCand = document.getElementById('upload-title-candidate');
+      const descCand = document.getElementById('upload-desc-candidate');
+      const sideLabel = document.getElementById('example-ai-side-label');
+      const exampleImg = document.getElementById('img-upload-candidate-example');
+      const uploadNextBtn = document.getElementById('btn-upload-next');
+
+      if (candidate === 'lula') {
+        titleCand.innerText = "Lula";
+        descCand.innerText = "Lula";
+        sideLabel.innerText = "✨ Com Lula";
+        exampleImg.src = "imagens/exemplo-lula-1.jpg";
+        
+        if (userSelfie) {
+          uploadNextBtn.className = "w-full bg-team-red text-white font-extrabold py-4 px-6 rounded-full text-sm flex items-center justify-center gap-2 hover:brightness-95 transition-all shadow-md";
+        }
+      } else {
+        titleCand.innerText = "Bolsonaro";
+        descCand.innerText = "Bolsonaro";
+        sideLabel.innerText = "✨ Com Bolsonaro";
+        exampleImg.src = "imagens/exemplo-bolsonaro-blur.png";
+        
+        if (userSelfie) {
+          uploadNextBtn.className = "w-full bg-team-green text-white font-extrabold py-4 px-6 rounded-full text-sm flex items-center justify-center gap-2 hover:brightness-95 transition-all shadow-md";
+        }
+      }
+    }
+
+    // Handle Upload Page
+    function handleFileSelect(event) {
+      const input = event.target;
+      if (input.files && input.files[0]) {
+        const file = input.files[0];
+        uploadedFileFile = file; // Salva o arquivo para upload real
+        
+        if (file.size > 10 * 1024 * 1024) {
+          alert('Por favor, selecione uma foto de no máximo 10MB.');
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          document.getElementById('img-preview').src = e.target.result;
+          document.getElementById('processing-selfie-preview').src = e.target.result; // Set for processing page blur thumbnail
+          document.getElementById('upload-state-empty').classList.add('hidden');
+          document.getElementById('upload-state-preview').classList.remove('hidden');
+          userSelfie = e.target.result;
+
+          // Enable next button and apply candidate color theme
+          const nextBtn = document.getElementById('btn-upload-next');
+          nextBtn.removeAttribute('disabled');
+          nextBtn.classList.remove('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+          
+          if (selectedCandidate === 'lula') {
+            nextBtn.className = "w-full bg-team-red text-white font-extrabold py-4 px-6 rounded-full text-sm flex items-center justify-center gap-2 hover:brightness-95 transition-all shadow-md";
+          } else {
+            nextBtn.className = "w-full bg-team-green text-white font-extrabold py-4 px-6 rounded-full text-sm flex items-center justify-center gap-2 hover:brightness-95 transition-all shadow-md";
+          }
+        }
+        reader.readAsDataURL(file);
+      }
+    }
+
+    function clearUpload(event) {
+      event.stopPropagation();
+      event.preventDefault();
+      
+      document.getElementById('file-input').value = "";
+      document.getElementById('upload-state-empty').classList.remove('hidden');
+      document.getElementById('upload-state-preview').classList.add('hidden');
+      userSelfie = null;
+      uploadedFileFile = null; // Reseta o arquivo no estado
+
+      // Disable next button
+      const nextBtn = document.getElementById('btn-upload-next');
+      nextBtn.setAttribute('disabled', 'true');
+      nextBtn.className = "w-full bg-slate-200 text-slate-400 font-extrabold py-4 px-6 rounded-full text-sm cursor-not-allowed flex items-center justify-center gap-2";
+    }
+
+    // ----------------------------------------------------
+    async function startAiProcessing() {
+      // Transition to processing page
+      showFlowSection('processing');
+      updateTopProgress(65);
+      
+      const candidateName = selectedCandidate === 'lula' ? 'Lula' : 'Bolsonaro';
+      document.getElementById('processing-candidate-name').innerText = candidateName;
+
+      // Reset progress bar
+      const progressBar = document.getElementById('processing-progress-bar');
+      const statusText = document.getElementById('processing-status-msg');
+      
+      if (selectedCandidate === 'lula') {
+        progressBar.className = "h-full bg-team-red transition-all duration-300 ease-out";
+      } else {
+        progressBar.className = "h-full bg-team-green transition-all duration-300 ease-out";
+      }
+
+      let currentPercent = 0;
+      let msgIndex = 0;
+      let uploadFinished = false;
+      let uploadErrorOccurred = false;
+
+      // Interval to update progress percentage
+      const progressInterval = setInterval(() => {
+        // Incrementa o progresso de forma realista
+        if (currentPercent < 90) {
+          currentPercent += Math.floor(Math.random() * 6) + 3;
+        } else if (uploadFinished) {
+          currentPercent += Math.floor(Math.random() * 5) + 2;
+        }
+        
+        if (currentPercent > 100) currentPercent = 100;
+        progressBar.style.width = `${currentPercent}%`;
+
+        // Switch status messages based on current percent
+        msgIndex = Math.floor((currentPercent / 100) * processingMessages.length);
+        if (msgIndex >= processingMessages.length) msgIndex = processingMessages.length - 1;
+        statusText.innerText = processingMessages[msgIndex];
+
+        if (currentPercent >= 100) {
+          clearInterval(progressInterval);
+          clearInterval(testimonialInterval);
+          
+          if (uploadErrorOccurred) {
+            alert("Ocorreu um erro ao enviar sua foto. Por favor, tente novamente.");
+            showFlowSection('upload');
+            updateTopProgress(40);
+          } else {
+            showResultPage();
+          }
+        }
+      }, 300);
+
+      // Rotate testimonials during loading
+      let testimonialIndex = 0;
+      const testimonialText = document.getElementById('processing-testimonial-text');
+      const testimonialAuthor = document.getElementById('processing-testimonial-author');
+      
+      const testimonialInterval = setInterval(() => {
+        testimonialIndex = (testimonialIndex + 1) % testimonials.length;
+        testimonialText.innerText = testimonials[testimonialIndex].text;
+        testimonialAuthor.innerText = testimonials[testimonialIndex].author;
+      }, 2000);
+
+      // Executa o upload em background para o Supabase
+      try {
+        currentSelfieId = self.crypto.randomUUID ? self.crypto.randomUUID() : "selfie_" + Math.random().toString(36).substring(2, 15);
+        
+        if (supabaseClient && uploadedFileFile) {
+          console.log("Supabase ativo, iniciando upload real...");
+          const fileExt = uploadedFileFile.name.split('.').pop();
+          const filePath = `${currentSelfieId}.${fileExt}`;
+          
+          // 1. Upload para o Bucket 'selfies'
+          const { data: uploadData, error: uploadError } = await supabaseClient.storage
+            .from('selfies')
+            .upload(filePath, uploadedFileFile);
+            
+          if (uploadError) throw uploadError;
+          
+          // 2. Obter URL pública
+          const { data: urlData } = supabaseClient.storage
+            .from('selfies')
+            .getPublicUrl(filePath);
+            
+          const publicUrl = urlData.publicUrl;
+          console.log("Upload concluído. URL pública da selfie:", publicUrl);
+
+          // 3. Gravar dados na tabela public.selfies
+          const { error: dbError } = await supabaseClient
+            .from('selfies')
+            .insert({
+              id: currentSelfieId,
+              candidate: selectedCandidate,
+              selfie_url: publicUrl,
+              status: 'pending'
+            });
+            
+          if (dbError) throw dbError;
+          console.log("Registro de selfie criado no Supabase com ID:", currentSelfieId);
+        } else {
+          console.log("Supabase não configurado. Continuando no modo offline demonstrativo.");
+        }
+        uploadFinished = true;
+      } catch (err) {
+        console.error("Erro no processamento do upload do Supabase:", err);
+        uploadErrorOccurred = true;
+        uploadFinished = true;
+      }
+    }
+
+    // ----------------------------------------------------
+    // RESULT PAGE STATE (media_1787256392195.png)
+    // ----------------------------------------------------
+    function showResultPage() {
+      showFlowSection('result');
+      updateTopProgress(85);
+
+      const candidateName = selectedCandidate === 'lula' ? 'Lula' : 'Bolsonaro';
+      document.getElementById('result-title-candidate').innerText = candidateName;
+
+      // Map watermarked preview images depending on selected candidate
+      const card1 = document.getElementById('img-result-card-1');
+      const card2 = document.getElementById('img-result-card-2');
+      const card3 = document.getElementById('img-result-card-3');
+
+      if (selectedCandidate === 'lula') {
+        card1.src = "imagens/exemplo-lula-1.jpg";
+        card2.src = "imagens/exemplo-lula-2.jpg";
+        card3.src = "imagens/exemplo-lula-3.jpg";
+      } else {
+        card1.src = "imagens/exemplo-bolsonaro-1.png";
+        card2.src = "imagens/exemplo-bolsonaro-2.png";
+        card3.src = "imagens/exemplo-bolsonaro-3.png";
+      }
+
+      // Configure themes for pricing buttons
+      selectCaktoPlan(selectedPlan, selectedPlanPrice);
+
+      // Start Countdown Timer (15:00 minutes)
+      startCountdownTimer(15 * 60);
+    }
+
+    function goBackToUploadScreen() {
+      clearInterval(timerInterval);
+      showFlowSection('upload');
+      updateTopProgress(40);
+    }
+
+    // Countdown Timer function
+    function startCountdownTimer(durationSeconds) {
+      if (timerInterval) clearInterval(timerInterval);
+
+      let timeLeft = durationSeconds;
+      const display = document.getElementById('timer-countdown');
+
+      timerInterval = setInterval(() => {
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+
+        const formattedMin = minutes < 10 ? `0${minutes}` : minutes;
+        const formattedSec = seconds < 10 ? `0${seconds}` : seconds;
+
+        display.innerText = `${formattedMin}:${formattedSec}`;
+
+        if (--timeLeft < 0) {
+          clearInterval(timerInterval);
+          display.innerText = "00:00";
+        }
+      }, 1000);
+    }
+
+    // Select Plan in Result Page
+    function selectCaktoPlan(planId, price) {
+      selectedPlan = planId;
+      selectedPlanPrice = price;
+
+      ['basic', 'pro', 'enterprise'].forEach(id => {
+        const element = document.getElementById(`c-plan-${id}`);
+        const radio = element.querySelector('.c-radio');
+        const dot = radio.querySelector('div');
+        
+        element.className = "w-full flex items-center justify-between p-3.5 bg-white border-2 rounded-2xl text-left transition-all border-slate-200 shadow-sm";
+        radio.className = "c-radio h-5 w-5 rounded-full border-2 border-slate-300 flex items-center justify-center flex-shrink-0 mt-0.5";
+        dot.classList.add('opacity-0');
+      });
+
+      const activeElement = document.getElementById(`c-plan-${planId}`);
+      const activeRadio = activeElement.querySelector('.c-radio');
+      const activeDot = activeRadio.querySelector('div');
+      
+      const themeColorClass = selectedCandidate === 'lula' ? 'border-team-red' : 'border-team-green';
+      const themeBgClass = selectedCandidate === 'lula' ? 'bg-team-red' : 'bg-team-green';
+      const themeRingClass = selectedCandidate === 'lula' ? 'ring-red-100 font-black' : 'ring-green-100 font-black';
+
+      activeElement.className = `w-full flex items-center justify-between p-3.5 bg-white border-2 rounded-2xl text-left transition-all ${themeColorClass} ring-2 ${themeRingClass} relative shadow-sm`;
+      activeRadio.className = `c-radio h-5 w-5 rounded-full border-2 ${themeColorClass} flex items-center justify-center flex-shrink-0 mt-0.5`;
+      
+      activeDot.classList.remove('opacity-0');
+      activeDot.className = `h-2.5 w-2.5 rounded-full ${themeBgClass} transition-opacity`;
+
+      // Update CTA text and checkout button style
+      const checkoutBtn = document.getElementById('btn-result-checkout');
+      if (selectedCandidate === 'lula') {
+        checkoutBtn.className = "w-full bg-team-red text-white font-extrabold py-4.5 px-6 rounded-full text-base transition-all shadow-md hover:brightness-95 flex items-center justify-center gap-2";
+      } else {
+        checkoutBtn.className = "w-full bg-team-green text-white font-extrabold py-4.5 px-6 rounded-full text-base transition-all shadow-md hover:brightness-95 flex items-center justify-center gap-2";
+      }
+    }
+
+    // Redirect to Cakto Checkout logic
+    function redirectToCaktoCheckout() {
+      // Get the correct checkout link based on selected candidate and plan
+      const baseUrl = caktoLinks[selectedCandidate][selectedPlan];
+      
+      // Anexar o ID da selfie para rastreamento (o Cakto repassa esses campos no webhook)
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      const targetUrl = `${baseUrl}${separator}src=${currentSelfieId}&external_id=${currentSelfieId}&utm_campaign=${currentSelfieId}`;
+      
+      console.log("Redirecionando para o Checkout da Cakto:", targetUrl);
+      window.location.href = targetUrl;
+    }
+
+    // Init scoreboard
+    updateScoreboard();
+  </script>
+</body>
+</html>
