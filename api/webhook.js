@@ -106,18 +106,20 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: "Replicate token not set" });
     }
 
-    // Resolve templates array
+    // Resolve templates array (reads candidate and gender, e.g. lula_m, lula_f)
     const templateList = [];
-    const cand = selfieRecord.candidate;
+    const dbCandidate = selfieRecord.candidate || 'lula';
+    const [cand, gender] = dbCandidate.includes('_') ? dbCandidate.split('_') : [dbCandidate, 'm'];
     const modelHash = process.env.REPLICATE_MODEL_VERSION || "9a423cef0b8ef6c5db1d4c556f4d411e737cd62da0e28f117c768994757c9e01";
 
     for (let i = 1; i <= photoCount; i++) {
+      const genderUpper = gender.toUpperCase();
       if (cand === 'lula') {
-        const customUrl = process.env[`TEMPLATE_LULA_${i}`];
-        templateList.push(customUrl || `${siteUrl}/imagens/exemplo-lula-${i}.jpg`);
+        const customUrl = process.env[`TEMPLATE_LULA_${genderUpper}_${i}`] || process.env[`TEMPLATE_LULA_${i}`];
+        templateList.push(customUrl || `${siteUrl}/imagens/exemplo-lula-${i}-${gender}.jpg`);
       } else {
-        const customUrl = process.env[`TEMPLATE_BOLSONARO_${i}`];
-        templateList.push(customUrl || `${siteUrl}/imagens/exemplo-bolsonaro-${i}.png`);
+        const customUrl = process.env[`TEMPLATE_BOLSONARO_${genderUpper}_${i}`] || process.env[`TEMPLATE_BOLSONARO_${i}`];
+        templateList.push(customUrl || `${siteUrl}/imagens/exemplo-bolsonaro-${i}-${gender}.png`);
       }
     }
 

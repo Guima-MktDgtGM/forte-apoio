@@ -273,6 +273,17 @@
                 <img id="img-upload-candidate-example" src="imagens/exemplo-lula-1.jpg" alt="Exemplo" class="w-full h-full object-cover">
               </div>
             </div>
+          <!-- SELETOR DE GÊNERO -->
+          <div class="mb-4">
+            <span class="text-[10px] font-black text-slate-400 text-center block uppercase mb-2">Como você deseja aparecer na foto?</span>
+            <div class="flex gap-3 justify-center">
+              <button type="button" onclick="selectGender('m')" id="gender-btn-m" class="flex-1 py-3.5 px-4 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm flex items-center justify-center gap-2 transition-all bg-white shadow-sm">
+                <span>👨</span> Homem
+              </button>
+              <button type="button" onclick="selectGender('f')" id="gender-btn-f" class="flex-1 py-3.5 px-4 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm flex items-center justify-center gap-2 transition-all bg-white shadow-sm">
+                <span>👩</span> Mulher
+              </button>
+            </div>
           </div>
 
           <div class="flex items-center justify-center gap-4 text-[10px] text-slate-400 mb-4 font-semibold">
@@ -599,6 +610,7 @@
     let uploadedFileFile = null; // Guardará o arquivo binário selecionado
     let currentSelfieId = "mock_" + Math.random().toString(36).substring(2, 11);
     let timerInterval = null;
+    let selectedGender = 'm'; // 'm' para masculino, 'f' para feminino
 
     // Cakto Links Configurations for each candidate and package
     const caktoLinks = {
@@ -832,6 +844,49 @@
         headerBadge.innerText = '💚 Bolsonaro';
         headerBadge.className = 'text-xs font-bold px-2.5 py-1 rounded-full text-white bg-team-green';
       }
+
+      // Update gender buttons theme
+      selectGender(selectedGender);
+    }
+
+    // Set and Style Selected Gender
+    function selectGender(gender) {
+      selectedGender = gender;
+      
+      const btnM = document.getElementById('gender-btn-m');
+      const btnF = document.getElementById('gender-btn-f');
+      
+      if (!btnM || !btnF) return;
+      
+      // Default unselected styles
+      btnM.className = "flex-1 py-3.5 px-4 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm flex items-center justify-center gap-2 transition-all bg-white shadow-sm";
+      btnF.className = "flex-1 py-3.5 px-4 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm flex items-center justify-center gap-2 transition-all bg-white shadow-sm";
+      
+      const activeBtn = gender === 'm' ? btnM : btnF;
+      
+      if (selectedCandidate === 'lula') {
+        activeBtn.className = "flex-1 py-3.5 px-4 rounded-2xl border-2 border-team-red text-team-red ring-2 ring-red-100 font-black text-sm flex items-center justify-center gap-2 transition-all bg-red-50/30 shadow-sm";
+      } else {
+        activeBtn.className = "flex-1 py-3.5 px-4 rounded-2xl border-2 border-team-green text-team-green ring-2 ring-green-100 font-black text-sm flex items-center justify-center gap-2 transition-all bg-green-50/30 shadow-sm";
+      }
+
+      updateUploadExampleImage();
+    }
+
+    // Update Thumbnail on Upload Screen based on Candidate and Gender
+    function updateUploadExampleImage() {
+      const imgExample = document.getElementById('img-upload-candidate-example');
+      const sideLabel = document.getElementById('example-ai-side-label');
+      
+      if (!imgExample || !sideLabel) return;
+
+      if (selectedCandidate === 'lula') {
+        sideLabel.innerText = "✨ Com Lula";
+        imgExample.src = selectedGender === 'm' ? "imagens/exemplo-lula-1-m.jpg" : "imagens/exemplo-lula-1-f.jpg";
+      } else {
+        sideLabel.innerText = "✨ Com Bolsonaro";
+        imgExample.src = selectedGender === 'm' ? "imagens/exemplo-bolsonaro-1-m.png" : "imagens/exemplo-bolsonaro-1-f.png";
+      }
     }
 
     // Toggle Pills directly on the flow screen
@@ -1053,12 +1108,12 @@
           const publicUrl = urlData.publicUrl;
           console.log("Upload concluído. URL pública da selfie:", publicUrl);
 
-          // 3. Gravar dados na tabela public.selfies
+          // 3. Gravar dados na tabela public.selfies (salva como lula_m, lula_f, etc. para o webhook ler)
           const { error: dbError } = await supabaseClient
             .from('selfies')
             .insert({
               id: currentSelfieId,
-              candidate: selectedCandidate,
+              candidate: `${selectedCandidate}_${selectedGender}`,
               selfie_url: publicUrl,
               status: 'pending'
             });
@@ -1092,13 +1147,13 @@
       const card3 = document.getElementById('img-result-card-3');
 
       if (selectedCandidate === 'lula') {
-        card1.src = "imagens/exemplo-lula-1.jpg";
-        card2.src = "imagens/exemplo-lula-2.jpg";
-        card3.src = "imagens/exemplo-lula-3.jpg";
+        card1.src = `imagens/exemplo-lula-1-${selectedGender}.jpg`;
+        card2.src = `imagens/exemplo-lula-2-${selectedGender}.jpg`;
+        card3.src = `imagens/exemplo-lula-3-${selectedGender}.jpg`;
       } else {
-        card1.src = "imagens/exemplo-bolsonaro-1.png";
-        card2.src = "imagens/exemplo-bolsonaro-2.png";
-        card3.src = "imagens/exemplo-bolsonaro-3.png";
+        card1.src = `imagens/exemplo-bolsonaro-1-${selectedGender}.png`;
+        card2.src = `imagens/exemplo-bolsonaro-2-${selectedGender}.png`;
+        card3.src = `imagens/exemplo-bolsonaro-3-${selectedGender}.png`;
       }
 
       // Configure themes for pricing buttons
