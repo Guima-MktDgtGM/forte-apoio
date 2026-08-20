@@ -116,10 +116,10 @@ module.exports = async (req, res) => {
       const genderUpper = gender.toUpperCase();
       if (cand === 'lula') {
         const customUrl = process.env[`TEMPLATE_LULA_${genderUpper}_${i}`] || process.env[`TEMPLATE_LULA_${i}`];
-        templateList.push(customUrl || `${siteUrl}/imagens/exemplo-lula-${i}-${gender}.jpg`);
+        templateList.push(customUrl || `${siteUrl}/imagens/exemplo-lula-${i}-${gender}.jpg.jpeg`);
       } else {
         const customUrl = process.env[`TEMPLATE_BOLSONARO_${genderUpper}_${i}`] || process.env[`TEMPLATE_BOLSONARO_${i}`];
-        templateList.push(customUrl || `${siteUrl}/imagens/exemplo-bolsonaro-${i}-${gender}.png`);
+        templateList.push(customUrl || `${siteUrl}/imagens/exemplo-bolsonaro-${i}-${gender}.png.jpeg`);
       }
     }
 
