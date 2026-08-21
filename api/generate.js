@@ -77,8 +77,8 @@ export default async (req, res) => {
     const dbCandidate = selfieRecord.candidate || 'lula';
     const [cand, gender] = dbCandidate.includes('_') ? dbCandidate.split('_') : [dbCandidate, 'm'];
     
-    const modelVersion = process.env.REPLICATE_MODEL_VERSION || "278a81e7ebb22db98bcba54de985d22cc1abeead2754eb1f2af717247be69b34";
-    const modelPath = modelVersion.includes('/') ? modelVersion : `codeplugtech/face-swap:${modelVersion}`;
+    const modelVersion = process.env.REPLICATE_MODEL_VERSION || "d1d6ea8c8be89d664a07a457526f7128109dee7030fdac424788d762c71ed111";
+    const modelPath = modelVersion.includes('/') ? modelVersion : `cdingram/face-swap:${modelVersion}`;
 
     for (let i = 1; i <= photoCount; i++) {
       const genderUpper = gender.toUpperCase();
