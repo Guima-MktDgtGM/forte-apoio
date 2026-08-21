@@ -104,11 +104,13 @@ export default async (req, res) => {
       console.error('[API Status] Failed to save results to Supabase:', updateError);
     }
 
-    console.log(`[API Status] Generation complete for ${selfieId}:`, results);
+    console.log(`[API Status] Generation complete for ${selfieId}:`, merged);
 
+    // Return the merged list so the browser sees every photo already finished,
+    // including the ones queued in an earlier round that the throttle split up.
     return res.status(200).json({
       status: 'ready',
-      results
+      results: merged
     });
 
   } catch (error) {

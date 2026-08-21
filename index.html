@@ -1159,35 +1159,13 @@
           if (dbError) throw dbError;
           console.log("Registro de selfie criado no Supabase com ID:", currentSelfieId);
 
-          // 4. Enfileirar o Face Swap no Replicate. A API só dispara as predictions
-          //    e responde em ~1s — quem espera a IA terminar é o polling em /api/status.
-          //    (Um face swap leva de ~50s a ~4min, e nenhuma função serverless
-          //    sobrevive a isso: era essa a causa das fotos nunca carregarem.)
-          console.log("Chamando API de geração para enfileirar o Face Swap...");
-          const response = await fetch('/api/generate', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ selfieId: currentSelfieId })
-          });
-
-          if (!response.ok) {
-            throw new Error(`Erro na API de geração: ${response.status} ${response.statusText}`);
-          }
-
-          const resData = await response.json();
-
-          if (resData && resData.results && resData.results.length > 0) {
-            // Já existia resultado salvo para essa selfie
-            console.log("As fotos dessa selfie já estavam prontas:", resData.results);
-            generatedImagesList = resData.results;
-          } else if (resData && resData.predictionIds && resData.predictionIds.length > 0) {
-            console.log("Face swaps enfileirados no Replicate:", resData.predictionIds);
-            generatedImagesList = await pollForResults(currentSelfieId, resData.predictionIds);
-          } else {
-            throw new Error("A API de geração não devolveu fotos nem IDs de processamento.");
-          }
+          // 4. Enfileirar o Face Swap e esperar via polling. A API só dispara as
+          //    predictions e responde em ~1s — quem espera a IA terminar é o
+          //    /api/status. (Um face swap leva de ~50s a ~4min e nenhuma função
+          //    serverless sobrevive a isso: era essa a causa das fotos nunca
+          //    carregarem e a tela cair nas imagens de exemplo.)
+          console.log("Iniciando a geração das fotos reais...");
+          generatedImagesList = await generateAndWait(currentSelfieId);
         } else {
           console.log("Supabase não configurado. Continuando no modo offline demonstrativo.");
         }
@@ -1200,15 +1178,61 @@
       }
     }
 
-    // Consulta /api/status de 3 em 3 segundos até as fotos ficarem prontas.
-    // Enquanto isso a barra de progresso fica travada em 90% (ver startAiProcessing).
-    // Teto de 5 minutos porque o cold boot do modelo no Replicate chega a 4min.
-    async function pollForResults(selfieId, predictionIds) {
-      const POLL_INTERVAL_MS = 3000;
-      const MAX_WAIT_MS = 5 * 60 * 1000;
-      const startedAt = Date.now();
+    // Quantas fotos a tela de resultado precisa para mostrar o rosto do cliente
+    const REQUIRED_PHOTOS = 3;
 
-      while (Date.now() - startedAt < MAX_WAIT_MS) {
+    // Enfileira o face swap e espera as fotos ficarem prontas.
+    // Enquanto a conta do Replicate estiver com menos de US$ 5 de crédito, ele
+    // só deixa criar 1 prediction por vez, então a API pode devolver o lote
+    // incompleto — por isso repetimos a chamada até fechar as 3 fotos.
+    async function generateAndWait(selfieId) {
+      const deadline = Date.now() + 5 * 60 * 1000;
+      const MAX_ROUNDS = 4;
+      let photos = [];
+      let round = 0;
+
+      while (photos.length < REQUIRED_PHOTOS && round < MAX_ROUNDS && Date.now() < deadline) {
+        round++;
+
+        const response = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selfieId })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Erro na API de geração: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (data.results && data.results.length > photos.length) {
+          photos = data.results;
+        }
+
+        if (photos.length >= REQUIRED_PHOTOS) break;
+
+        if (!data.predictionIds || data.predictionIds.length === 0) {
+          console.warn("Nenhuma foto foi enfileirada nesta rodada. Parando.");
+          break;
+        }
+
+        console.log(`Rodada ${round}: ${data.predictionIds.length} fotos enfileiradas, ${data.missing || 0} ficaram para a próxima.`);
+
+        const finished = await pollForResults(selfieId, data.predictionIds, deadline);
+        if (finished.length > photos.length) photos = finished;
+      }
+
+      return photos;
+    }
+
+    // Consulta /api/status de 3 em 3 segundos até as fotos desta rodada ficarem prontas.
+    // Enquanto isso a barra de progresso fica travada em 90% (ver startAiProcessing).
+    // O prazo é de 5 minutos porque o cold boot do modelo no Replicate chega a 4min.
+    async function pollForResults(selfieId, predictionIds, deadline) {
+      const POLL_INTERVAL_MS = 3000;
+
+      while (Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
 
         try {
@@ -1241,7 +1265,7 @@
         }
       }
 
-      console.error("Tempo limite de 5 minutos esperando a IA. Caindo nas fotos de exemplo.");
+      console.error("Prazo esgotado esperando a IA terminar esta rodada.");
       return [];
     }
 

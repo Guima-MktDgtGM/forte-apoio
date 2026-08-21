@@ -13,12 +13,20 @@ const replicate = replicateToken ? new Replicate({ auth: replicateToken }) : nul
 // Public site URL: Replicate needs to download the template images from here
 const SITE_URL = process.env.PUBLIC_SITE_URL || 'https://forte-apoio.vercel.app';
 
-// Free preview: only the 3 photos shown on the result screen are generated before payment.
-// Photos 4 and 5 are only generated after the customer buys the 5 photo package.
+// Free preview: only the 3 photos shown on the result screen are generated before
+// payment. Photos 4 and 5 come later, after the 5 photo package is bought.
 const PREVIEW_PHOTO_COUNT = 3;
 const FULL_PHOTO_COUNT = 5;
 
 const MODEL_VERSION = process.env.REPLICATE_MODEL_VERSION || 'd1d6ea8c8be89d664a07a457526f7128109dee7030fdac424788d762c71ed111';
+
+// Below $5 of credit Replicate throttles prediction creation to a burst of 1,
+// so predictions have to be created one at a time, retrying on 429. This budget
+// keeps the whole thing inside the serverless maxDuration.
+const CREATE_BUDGET_MS = 45000;
+const DEFAULT_RETRY_AFTER_MS = 11000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Builds the template target URLs for a range of photos (reads candidate and gender, e.g. lula_m, lula_f)
 function buildTemplateUrls(dbCandidate, fromIndex, toIndex) {
@@ -38,6 +46,70 @@ function buildTemplateUrls(dbCandidate, fromIndex, toIndex) {
   }
 
   return list;
+}
+
+// Reads the "retry_after" the Replicate API asks for, in milliseconds
+function retryAfterMs(error) {
+  const raw = String(error && error.message ? error.message : error);
+  const match = raw.match(/"retry_after"\s*:\s*(\d+)/);
+  if (match) return (parseInt(match[1], 10) + 1) * 1000;
+  return DEFAULT_RETRY_AFTER_MS;
+}
+
+function isThrottled(error) {
+  if (!error) return false;
+  if (error.response && error.response.status === 429) return true;
+  return String(error.message || error).includes('429');
+}
+
+// Creates the predictions ONE AT A TIME, waiting out any 429 throttle.
+// Returns whatever it managed to create before the time budget runs out —
+// the browser calls this endpoint again for the rest.
+async function createPredictionsSequentially(templates, sourceImageUrl, hookUrl) {
+  const deadline = Date.now() + CREATE_BUDGET_MS;
+  const created = [];
+  let lastError = null;
+
+  for (const templateUrl of templates) {
+    let placed = false;
+
+    while (!placed && Date.now() < deadline) {
+      try {
+        const prediction = await replicate.predictions.create({
+          version: MODEL_VERSION,
+          input: {
+            input_image: templateUrl, // the template target base image
+            swap_image: sourceImageUrl // the user's selfie
+          },
+          webhook: hookUrl,
+          webhook_events_filter: ['completed']
+        });
+
+        created.push(prediction.id);
+        placed = true;
+      } catch (e) {
+        lastError = e;
+
+        if (!isThrottled(e)) {
+          console.error('[API Generate] Non-throttle error creating prediction:', e);
+          return { created, error: e };
+        }
+
+        const waitMs = retryAfterMs(e);
+        if (Date.now() + waitMs >= deadline) {
+          console.warn('[API Generate] Throttled and out of time budget. Returning partial batch.');
+          return { created, error: null };
+        }
+
+        console.log(`[API Generate] Throttled by Replicate (low credit). Waiting ${waitMs}ms before retrying.`);
+        await sleep(waitMs);
+      }
+    }
+
+    if (!placed) break;
+  }
+
+  return { created, error: created.length === 0 ? lastError : null };
 }
 
 export default async (req, res) => {
@@ -64,8 +136,6 @@ export default async (req, res) => {
       return res.status(400).json({ error: 'Missing selfieId' });
     }
 
-    console.log(`[API Generate] Starting ${extra ? 'EXTRA' : 'PREVIEW'} generation for selfie ID: ${selfieId}`);
-
     if (!replicate) {
       console.error('[API Generate] Replicate client not configured. Set REPLICATE_API_TOKEN.');
       return res.status(500).json({ error: 'Replicate token not set' });
@@ -89,100 +159,51 @@ export default async (req, res) => {
       return res.status(400).json({ error: 'DB record is missing selfie_url' });
     }
 
+    // Photos already finished and stored (the Replicate webhook appends them here)
     const existingUrls = selfieRecord.result_url ? selfieRecord.result_url.split(',').filter(Boolean) : [];
 
-    // ------------------------------------------------------------------
-    // MODE A: EXTRA — photos 4 and 5, fired after the customer paid.
-    // Replicate calls /api/replicate-hook when each one finishes, and that
-    // endpoint appends the URL to result_url so obrigado.html picks it up.
-    // ------------------------------------------------------------------
-    if (extra) {
-      // Never generate more than the customer actually bought
-      const targetCount = Math.min(Number(target) || FULL_PHOTO_COUNT, FULL_PHOTO_COUNT);
+    // How many photos this call should end up with
+    const wanted = extra
+      ? Math.min(Number(target) || FULL_PHOTO_COUNT, FULL_PHOTO_COUNT)
+      : PREVIEW_PHOTO_COUNT;
 
-      if (existingUrls.length >= targetCount) {
-        console.log(`[API Generate] Photos already complete for ${selfieId} (${existingUrls.length}/${targetCount})`);
-        return res.status(200).json({ status: 'success', results: existingUrls });
-      }
+    console.log(`[API Generate] ${extra ? 'EXTRA' : 'PREVIEW'} for ${selfieId}: ${existingUrls.length}/${wanted} done`);
 
-      const templates = buildTemplateUrls(selfieRecord.candidate, existingUrls.length + 1, targetCount);
-      const hookUrl = `${SITE_URL}/api/replicate-hook?selfieId=${encodeURIComponent(selfieId)}`;
-
-      const created = await Promise.all(
-        templates.map((templateUrl) =>
-          replicate.predictions.create({
-            version: MODEL_VERSION,
-            input: {
-              input_image: templateUrl, // the template target base image
-              swap_image: sourceImageUrl // the user's selfie
-            },
-            webhook: hookUrl,
-            webhook_events_filter: ['completed']
-          })
-        )
-      );
-
-      console.log(`[API Generate] Queued ${created.length} extra photos for ${selfieId}:`, created.map((p) => p.id));
-
-      return res.status(200).json({
-        status: 'queued',
-        predictionIds: created.map((p) => p.id)
-      });
-    }
-
-    // ------------------------------------------------------------------
-    // MODE B: PREVIEW — the 3 watermarked photos shown before checkout
-    // ------------------------------------------------------------------
-
-    // If already generated, return the existing URLs right away
-    if (existingUrls.length > 0) {
-      console.log(`[API Generate] Results already exist in DB for ${selfieId}`);
+    if (existingUrls.length >= wanted) {
       return res.status(200).json({ status: 'success', results: existingUrls });
     }
 
-    const templates = buildTemplateUrls(selfieRecord.candidate, 1, PREVIEW_PHOTO_COUNT);
+    // Only queue the photos that are still missing — this makes the endpoint
+    // safe to call again when the throttle only let part of the batch through.
+    const templates = buildTemplateUrls(selfieRecord.candidate, existingUrls.length + 1, wanted);
+    const hookUrl = `${SITE_URL}/api/replicate-hook?selfieId=${encodeURIComponent(selfieId)}`;
+
     console.log(`[API Generate] Queueing ${templates.length} face swaps for ${selfieId}. Templates:`, templates);
 
-    // The same webhook used for the extra photos is attached here as a safety
-    // net: if the visitor closes the tab or the browser gives up polling, the
-    // finished photos still land in Supabase and are delivered after payment.
-    const previewHookUrl = `${SITE_URL}/api/replicate-hook?selfieId=${encodeURIComponent(selfieId)}`;
+    // Fire the predictions WITHOUT waiting for the AI to finish. A face swap
+    // takes 50s (warm) to 4min (cold boot) and no serverless function survives
+    // that, so the browser polls /api/status instead.
+    const { created, error } = await createPredictionsSequentially(templates, sourceImageUrl, hookUrl);
 
-    // Fire all predictions in parallel WITHOUT waiting for them to finish.
-    // A face swap takes 50s (warm) to 4min (cold boot) and no serverless
-    // function survives that, so the browser polls /api/status instead.
-    let created;
-    try {
-      created = await Promise.all(
-        templates.map((templateUrl) =>
-          replicate.predictions.create({
-            version: MODEL_VERSION,
-            input: {
-              input_image: templateUrl,
-              swap_image: sourceImageUrl
-            },
-            webhook: previewHookUrl,
-            webhook_events_filter: ['completed']
-          })
-        )
-      );
-    } catch (e) {
-      console.error('[API Generate] Failed to queue predictions:', e);
+    if (error && created.length === 0) {
+      console.error('[API Generate] Failed to queue any prediction:', error);
       // Persist the exact error message in the Supabase status column for remote debugging
       await supabase
         .from('selfies')
-        .update({ status: `failed_replicate: ${e.message}` })
+        .update({ status: `failed_replicate: ${error.message || error}` })
         .eq('id', selfieId);
-      return res.status(500).json({ error: e.message });
+      return res.status(500).json({ error: error.message || String(error) });
     }
 
-    const predictionIds = created.map((p) => p.id);
-    console.log(`[API Generate] Queued predictions for ${selfieId}:`, predictionIds);
+    console.log(`[API Generate] Queued ${created.length}/${templates.length} predictions for ${selfieId}:`, created);
 
     return res.status(200).json({
       status: 'queued',
       selfieId,
-      predictionIds
+      predictionIds: created,
+      queued: created.length,
+      missing: templates.length - created.length,
+      results: existingUrls
     });
 
   } catch (error) {
