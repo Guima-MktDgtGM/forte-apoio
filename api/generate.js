@@ -92,36 +92,33 @@ export default async (req, res) => {
 
     console.log(`[API Generate] Starting parallel Face Swap for ${photoCount} variations. Templates:`, templateList);
 
-    // 2. Trigger Replicate Faceswap model in parallel
+    // 2. Trigger Replicate Faceswap model sequentially (bypasses the 1-burst limit for low credit accounts)
     let generatedUrls = [];
     try {
-      const promises = templateList.map(async (templateUrl, idx) => {
-        try {
-          console.log(`[API Generate] Triggering Replicate for variation #${idx + 1} with target: ${templateUrl}`);
-          const output = await replicate.run(
-            `lucataco/faceswap:${modelHash}`,
-            {
-              input: {
-                target_image: templateUrl,
-                swap_image: sourceImageUrl
-              }
+      for (let idx = 0; idx < templateList.length; idx++) {
+        const templateUrl = templateList[idx];
+        console.log(`[API Generate] Triggering Replicate (sequential) for variation #${idx + 1} with target: ${templateUrl}`);
+        
+        const output = await replicate.run(
+          `lucataco/faceswap:${modelHash}`,
+          {
+            input: {
+              target_image: templateUrl,
+              swap_image: sourceImageUrl
             }
-          );
-          
-          if (output) {
-            console.log(`[API Generate] Replicate output for variation #${idx + 1}:`, output);
-            return output;
           }
-          throw new Error("Empty output from Replicate");
-        } catch (err) {
-          console.error(`[API Generate] Replicate error for variation #${idx + 1}:`, err);
-          throw new Error(`Variation #${idx + 1} failed: ${err.message || err}`);
+        );
+        
+        if (output) {
+          console.log(`[API Generate] Replicate output for variation #${idx + 1}:`, output);
+          const url = Array.isArray(output) ? output[0] : output;
+          generatedUrls.push(url);
+        } else {
+          throw new Error(`Empty output from Replicate on variation #${idx + 1}`);
         }
-      });
-
-      generatedUrls = await Promise.all(promises);
+      }
     } catch (e) {
-      console.error("[API Generate] Parallel processing failure:", e);
+      console.error("[API Generate] Sequential processing failure:", e);
       // Persist the exact error message in the Supabase status column for remote debugging
       await supabase
         .from('selfies')
