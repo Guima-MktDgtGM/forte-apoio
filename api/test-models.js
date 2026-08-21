@@ -1,4 +1,3 @@
-import Replicate from 'replicate';
 
 const replicateToken = process.env.REPLICATE_API_TOKEN;
 
@@ -36,16 +35,30 @@ export default async (req, res) => {
   }
 
   try {
-    const replicate = new Replicate({ auth: replicateToken });
-
     const input = { prompt: prompt || '', image_input: images, output_format: 'jpg' };
 
     console.log(`[Test] Running ${model} with ${images.length} images`);
     const started = Date.now();
 
-    const output = await replicate.run(model, { input });
+    // Raw HTTP call: the replicate 0.28 client mangles array inputs.
+    // "Prefer: wait" makes Replicate hold the response until the prediction ends.
+    const r = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${replicateToken}`,
+        'Content-Type': 'application/json',
+        Prefer: 'wait'
+      },
+      body: JSON.stringify({ input })
+    });
 
-    const url = extractUrl(output);
+    const prediction = await r.json();
+
+    if (!r.ok || prediction.error) {
+      return res.status(500).json({ error: prediction.detail || prediction.error || 'replicate error', enviado: input });
+    }
+
+    const url = extractUrl(prediction.output);
     console.log(`[Test] Done in ${Date.now() - started}ms:`, url);
 
     return res.status(200).json({
@@ -53,7 +66,8 @@ export default async (req, res) => {
       model,
       seconds: Math.round((Date.now() - started) / 1000),
       url,
-      raw: url ? undefined : output
+      raw: url ? undefined : prediction.output,
+      status_replicate: prediction.status
     });
   } catch (err) {
     console.error('[Test] Error:', err);
