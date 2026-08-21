@@ -70,14 +70,15 @@ export default async (req, res) => {
       return res.status(500).json({ error: "Replicate token not set" });
     }
 
-
-    const photoCount = 5;
+    const photoCount = 5; 
 
     // Resolve templates array (reads candidate and gender, e.g. lula_m, lula_f)
     const templateList = [];
     const dbCandidate = selfieRecord.candidate || 'lula';
     const [cand, gender] = dbCandidate.includes('_') ? dbCandidate.split('_') : [dbCandidate, 'm'];
-    const modelHash = process.env.REPLICATE_MODEL_VERSION || "9a423cef0b8ef6c5db1d4c556f4d411e737cd62da0e28f117c768994757c9e01";
+    
+    const modelVersion = process.env.REPLICATE_MODEL_VERSION || "278a81e7ebb22db98bcba54de985d22cc1abeead2754eb1f2af717247be69b34";
+    const modelPath = modelVersion.includes('/') ? modelVersion : `codeplugtech/face-swap:${modelVersion}`;
 
     for (let i = 1; i <= photoCount; i++) {
       const genderUpper = gender.toUpperCase();
@@ -90,7 +91,7 @@ export default async (req, res) => {
       }
     }
 
-    console.log(`[API Generate] Starting parallel Face Swap for ${photoCount} variations. Templates:`, templateList);
+    console.log(`[API Generate] Starting sequential Face Swap for ${photoCount} variations using model: ${modelPath}. Templates:`, templateList);
 
     // 2. Trigger Replicate Faceswap model sequentially (bypasses the 1-burst limit for low credit accounts)
     let generatedUrls = [];
@@ -100,11 +101,11 @@ export default async (req, res) => {
         console.log(`[API Generate] Triggering Replicate (sequential) for variation #${idx + 1} with target: ${templateUrl}`);
         
         const output = await replicate.run(
-          `lucataco/faceswap:${modelHash}`,
+          modelPath,
           {
             input: {
-              target_image: templateUrl,
-              swap_image: sourceImageUrl
+              input_image: templateUrl, // the template target base image
+              swap_image: sourceImageUrl // the user's selfie
             }
           }
         );
@@ -135,7 +136,7 @@ export default async (req, res) => {
     }
 
     const resultsCsv = generatedUrls.join(',');
-    console.log("[API Generate] Parallel generation complete. Saved CSV:", resultsCsv);
+    console.log("[API Generate] Sequential generation complete. Saved CSV:", resultsCsv);
 
     // 3. Update database with generated image URLs list (keeps status 'pending')
     const { error: updateError } = await supabase
