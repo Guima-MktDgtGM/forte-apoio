@@ -109,6 +109,26 @@ module.exports = async (req, res) => {
 
     console.log(`Selfie ID ${selfieId} successfully marked as completed!`);
 
+    // 7. If the customer bought more photos than the free preview generated,
+    // queue the remaining ones now. /api/generate only fires the predictions
+    // and returns in ~1s; Replicate then calls /api/replicate-hook for each
+    // finished photo, and obrigado.html picks them up while it polls Supabase.
+    const generatedCount = finalResultUrl ? finalResultUrl.split(',').filter(Boolean).length : 0;
+    if (generatedCount > 0 && photoCount > generatedCount) {
+      try {
+        const siteUrl = process.env.PUBLIC_SITE_URL || 'https://forte-apoio.vercel.app';
+        const genRes = await fetch(`${siteUrl}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selfieId, extra: true, target: photoCount })
+        });
+        console.log(`Queued ${photoCount - generatedCount} extra photos for ${selfieId}. Generate API responded ${genRes.status}`);
+      } catch (e) {
+        // Non-blocking: the customer still keeps the photos already generated
+        console.error("Failed to queue extra photos:", e);
+      }
+    }
+
     return res.status(200).json({
       status: "success",
       selfieId,

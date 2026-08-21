@@ -490,6 +490,16 @@
 
           </div>
 
+          <!-- Aviso exibido apenas quando caimos nas fotos de exemplo -->
+          <div id="result-example-notice" class="hidden bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2.5 mb-3">
+            <div class="flex items-start gap-2">
+              <i class="fa-solid fa-circle-info text-amber-500 text-xs mt-0.5"></i>
+              <p class="text-[11px] text-amber-800 font-semibold leading-snug">
+                As imagens acima s&atilde;o <strong>exemplos</strong> de como ficam as fotos dos apoiadores. A sua ainda est&aacute; sendo finalizada e chega com o seu rosto, em alta resolu&ccedil;&atilde;o, assim que voc&ecirc; confirmar o plano.
+              </p>
+            </div>
+          </div>
+
           <!-- Change selfie link button -->
           <button onclick="goBackToUploadScreen()" class="self-center flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors font-bold text-xs mb-5">
             <i class="fa-solid fa-camera"></i> Enviar outra foto
@@ -1149,8 +1159,11 @@
           if (dbError) throw dbError;
           console.log("Registro de selfie criado no Supabase com ID:", currentSelfieId);
 
-          // 4. Disparar geração paralela do Replicate chamando nossa API interna
-          console.log("Chamando API de geração para rodar o Face Swap...");
+          // 4. Enfileirar o Face Swap no Replicate. A API só dispara as predictions
+          //    e responde em ~1s — quem espera a IA terminar é o polling em /api/status.
+          //    (Um face swap leva de ~50s a ~4min, e nenhuma função serverless
+          //    sobrevive a isso: era essa a causa das fotos nunca carregarem.)
+          console.log("Chamando API de geração para enfileirar o Face Swap...");
           const response = await fetch('/api/generate', {
             method: 'POST',
             headers: {
@@ -1160,13 +1173,20 @@
           });
 
           if (!response.ok) {
-            throw new Error(`Erro na API de geração: ${response.statusText}`);
+            throw new Error(`Erro na API de geração: ${response.status} ${response.statusText}`);
           }
 
           const resData = await response.json();
-          if (resData && resData.results) {
-            console.log("Geração concluída com sucesso! Imagens reais geradas:", resData.results);
+
+          if (resData && resData.results && resData.results.length > 0) {
+            // Já existia resultado salvo para essa selfie
+            console.log("As fotos dessa selfie já estavam prontas:", resData.results);
             generatedImagesList = resData.results;
+          } else if (resData && resData.predictionIds && resData.predictionIds.length > 0) {
+            console.log("Face swaps enfileirados no Replicate:", resData.predictionIds);
+            generatedImagesList = await pollForResults(currentSelfieId, resData.predictionIds);
+          } else {
+            throw new Error("A API de geração não devolveu fotos nem IDs de processamento.");
           }
         } else {
           console.log("Supabase não configurado. Continuando no modo offline demonstrativo.");
@@ -1178,6 +1198,51 @@
         console.log("Prosseguindo no modo offline de simulação para fins de teste.");
         uploadFinished = true;
       }
+    }
+
+    // Consulta /api/status de 3 em 3 segundos até as fotos ficarem prontas.
+    // Enquanto isso a barra de progresso fica travada em 90% (ver startAiProcessing).
+    // Teto de 5 minutos porque o cold boot do modelo no Replicate chega a 4min.
+    async function pollForResults(selfieId, predictionIds) {
+      const POLL_INTERVAL_MS = 3000;
+      const MAX_WAIT_MS = 5 * 60 * 1000;
+      const startedAt = Date.now();
+
+      while (Date.now() - startedAt < MAX_WAIT_MS) {
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+
+        try {
+          const res = await fetch('/api/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selfieId, predictionIds })
+          });
+
+          if (!res.ok) {
+            console.warn("Consulta de status respondeu", res.status, "- tentando de novo.");
+            continue;
+          }
+
+          const data = await res.json();
+
+          if (data.status === 'ready' && data.results && data.results.length > 0) {
+            console.log("Fotos reais prontas!", data.results);
+            return data.results;
+          }
+
+          if (data.status === 'failed') {
+            console.error("A geração falhou no Replicate:", data.error);
+            return [];
+          }
+
+          console.log(`Gerando... ${data.ready || 0}/${data.total || predictionIds.length} prontas.`);
+        } catch (err) {
+          console.warn("Erro ao consultar o status da geração (segue tentando):", err);
+        }
+      }
+
+      console.error("Tempo limite de 5 minutos esperando a IA. Caindo nas fotos de exemplo.");
+      return [];
     }
 
     // ----------------------------------------------------
@@ -1195,13 +1260,17 @@
       const card2 = document.getElementById('img-result-card-2');
       const card3 = document.getElementById('img-result-card-3');
 
+      const exampleNotice = document.getElementById('result-example-notice');
+
       if (generatedImagesList && generatedImagesList.length >= 3) {
         console.log("Exibindo as fotos geradas reais da pessoa com marca d'água!");
         card1.src = generatedImagesList[0];
         card2.src = generatedImagesList[1];
         card3.src = generatedImagesList[2];
+        if (exampleNotice) exampleNotice.classList.add('hidden');
       } else {
         console.log("Sem fotos geradas reais. Usando as fotos estáticas de exemplo como fallback.");
+        if (exampleNotice) exampleNotice.classList.remove('hidden');
         if (selectedCandidate === 'lula') {
           card1.src = `imagens/exemplo-lula-1-${selectedGender}.jpg.jpeg`;
           card2.src = `imagens/exemplo-lula-2-${selectedGender}.jpg.jpeg`;
