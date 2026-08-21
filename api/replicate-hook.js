@@ -39,11 +39,16 @@ export default async (req, res) => {
       return res.status(200).json({ status: 'ignored', reason: 'empty output' });
     }
 
+    // nano-banana usa image_input: [template, selfie]; o face swap usa input_image
+    const entrada = prediction.input || {};
+    const imagens = Array.isArray(entrada.image_input) ? entrada.image_input : [];
+
     const finalUrl = await finalizarFoto({
       selfieId,
       predictionId: prediction.id,
       outputUrl,
-      inputImageUrl: prediction.input && prediction.input.input_image
+      inputImageUrl: imagens[0] || entrada.input_image,
+      selfieUrl: imagens[1] || entrada.swap_image
     });
 
     const { data: record, error: fetchError } = await supabase

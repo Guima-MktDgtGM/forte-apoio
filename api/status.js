@@ -72,11 +72,14 @@ export default async (req, res) => {
       const outputUrl = extractUrl(p.output);
       if (!outputUrl) continue;
       try {
+        const entrada = p.input || {};
+        const imagens = Array.isArray(entrada.image_input) ? entrada.image_input : [];
         finais.push(await finalizarFoto({
           selfieId,
           predictionId: p.id,
           outputUrl,
-          inputImageUrl: p.input && p.input.input_image
+          inputImageUrl: imagens[0] || entrada.input_image,
+          selfieUrl: imagens[1] || entrada.swap_image
         }));
       } catch (e) {
         console.error(`[API Status] Falha ao finalizar ${p.id}:`, e.message);
