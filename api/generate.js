@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { normalizarSelfie } from '../lib/selfie.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -159,12 +160,16 @@ export default async (req, res) => {
       return res.status(200).json({ status: 'success', results: existingUrls });
     }
 
+    // Deixa a selfie em pe antes de mandar pro Replicate: foto de celular vem
+    // deitada com etiqueta EXIF, e o detector de rosto le os pixels crus.
+    const selfieNormalizada = await normalizarSelfie(selfieId, sourceImageUrl);
+
     const templates = buildTemplateUrls(selfieRecord.candidate, existingUrls.length + 1, wanted);
     const hookUrl = `${SITE_URL}/api/replicate-hook?selfieId=${encodeURIComponent(selfieId)}`;
 
     console.log(`[API Generate] Queueing ${templates.length} face swaps for ${selfieId}:`, templates);
 
-    const { created, error } = await createPredictionsSequentially(templates, sourceImageUrl, hookUrl);
+    const { created, error } = await createPredictionsSequentially(templates, selfieNormalizada, hookUrl);
 
     if (error && created.length === 0) {
       console.error('[API Generate] Failed to queue any prediction:', error.message);
