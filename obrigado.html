@@ -216,7 +216,8 @@
       const progressBar = document.getElementById('top-progress-bar');
       
       badge.classList.remove('hidden');
-      if (candidate === 'lula') {
+      // o banco grava 'lula_m' / 'lula_f', entao nao da para comparar com 'lula' puro
+      if (String(candidate || '').startsWith('lula')) {
         badge.innerText = "LULA 🔴";
         badge.className = "text-xs font-semibold px-2.5 py-1 rounded-full text-white bg-team-red";
         progressBar.className = "h-full bg-team-red transition-all duration-500 ease-out";
@@ -232,8 +233,9 @@
       container.innerHTML = "";
 
       const resultUrls = data.result_url ? data.result_url.split(',') : [];
-      const candidateName = data.candidate === 'lula' ? 'Lula' : 'Bolsonaro';
-      const themeBgClass = data.candidate === 'lula' ? 'bg-team-red' : 'bg-team-green';
+      const ehLula = String(data.candidate || '').startsWith('lula');
+      const candidateName = ehLula ? 'Lula' : 'Bolsonaro';
+      const themeBgClass = ehLula ? 'bg-team-red' : 'bg-team-green';
 
       if (resultUrls.length === 0) {
         container.innerHTML = `<p class="text-xs text-center text-slate-500">Erro: Nenhuma imagem encontrada no registro.</p>`;
