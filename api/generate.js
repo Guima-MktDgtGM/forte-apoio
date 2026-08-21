@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { normalizarSelfie } from '../lib/selfie.js';
+import { indiceDoTemplate } from '../lib/ordem.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -45,7 +46,9 @@ function buildTemplateUrls(dbCandidate, fromIndex, toIndex) {
   const candidato = cand === 'lula' ? 'lula' : 'bolsonaro';
   const list = [];
 
-  for (let i = fromIndex; i <= toIndex; i++) {
+  for (let posicao = fromIndex; posicao <= toIndex; posicao++) {
+    // a posicao 1 e sempre o template de cabeca maior (ver lib/ordem.js)
+    const i = indiceDoTemplate(candidato, gender, posicao);
     const custom = process.env[`TEMPLATE_${candidato.toUpperCase()}_${gender.toUpperCase()}_${i}`];
     list.push(custom || `${SITE_URL}/imagens/sem-cabeca-${candidato}-${i}-${gender}.jpg`);
   }
