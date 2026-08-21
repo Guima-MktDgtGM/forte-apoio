@@ -434,7 +434,12 @@
 
             <!-- Card 2 -->
             <div class="flex flex-col rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-sm watermark-container aspect-[3/4]">
-              <img id="img-result-card-2" src="imagens/exemplo-lula-1.jpg" class="w-full h-full object-cover filter blur-[1px] brightness-90">
+              <img id="img-result-card-2" src="imagens/exemplo-lula-1.jpg" class="w-full h-full object-cover filter blur-[7px] brightness-75 scale-110">
+              <!-- Cenario bloqueado: nao e a foto do cliente, e um cenario que ele libera comprando -->
+              <div class="absolute inset-0 bg-slate-900/45 flex flex-col items-center justify-center gap-1 pointer-events-none">
+                <i class="fa-solid fa-lock text-white text-lg drop-shadow"></i>
+                <span class="text-[8px] font-black text-white uppercase tracking-wide text-center leading-tight px-1">Cenario<br>bloqueado</span>
+              </div>
               <div class="absolute inset-0 watermark-pattern opacity-40 pointer-events-none"></div>
               <div class="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none select-none">
                 <div class="watermark-text-grid">
@@ -462,7 +467,12 @@
 
             <!-- Card 3 -->
             <div class="flex flex-col rounded-xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-sm watermark-container aspect-[3/4]">
-              <img id="img-result-card-3" src="imagens/exemplo-lula-1.jpg" class="w-full h-full object-cover filter blur-[1px] brightness-75">
+              <img id="img-result-card-3" src="imagens/exemplo-lula-1.jpg" class="w-full h-full object-cover filter blur-[7px] brightness-75 scale-110">
+              <!-- Cenario bloqueado: nao e a foto do cliente, e um cenario que ele libera comprando -->
+              <div class="absolute inset-0 bg-slate-900/45 flex flex-col items-center justify-center gap-1 pointer-events-none">
+                <i class="fa-solid fa-lock text-white text-lg drop-shadow"></i>
+                <span class="text-[8px] font-black text-white uppercase tracking-wide text-center leading-tight px-1">Cenario<br>bloqueado</span>
+              </div>
               <div class="absolute inset-0 watermark-pattern opacity-40 pointer-events-none"></div>
               <div class="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none select-none">
                 <div class="watermark-text-grid">
@@ -495,7 +505,7 @@
             <div class="flex items-start gap-2">
               <i class="fa-solid fa-circle-info text-amber-500 text-xs mt-0.5"></i>
               <p class="text-[11px] text-amber-800 font-semibold leading-snug">
-                As imagens acima s&atilde;o <strong>exemplos</strong> de como ficam as fotos dos apoiadores. A sua ainda est&aacute; sendo finalizada e chega com o seu rosto, em alta resolu&ccedil;&atilde;o, assim que voc&ecirc; confirmar o plano.
+                A imagem acima &eacute; um <strong>exemplo</strong> de como ficam as fotos dos apoiadores. A sua ainda est&aacute; sendo finalizada e chega com o seu rosto, em alta resolu&ccedil;&atilde;o, assim que voc&ecirc; confirmar o plano.
               </p>
             </div>
           </div>
@@ -1179,7 +1189,7 @@
     }
 
     // Quantas fotos a tela de resultado precisa para mostrar o rosto do cliente
-    const REQUIRED_PHOTOS = 3;
+    const REQUIRED_PHOTOS = 1;
 
     // Enfileira o face swap e espera as fotos ficarem prontas.
     // Enquanto a conta do Replicate estiver com menos de US$ 5 de crédito, ele
@@ -1286,24 +1296,22 @@
 
       const exampleNotice = document.getElementById('result-example-notice');
 
-      if (generatedImagesList && generatedImagesList.length >= 3) {
-        console.log("Exibindo as fotos geradas reais da pessoa com marca d'água!");
+      // Cards 2 e 3 sao sempre CENARIOS bloqueados (desfocados, com cadeado):
+      // nao sao o cliente, e o que ele libera comprando. So o card 1 traz a foto
+      // real dele, que e a unica gerada antes do pagamento.
+      const ext = selectedCandidate === 'lula' ? 'jpg.jpeg' : 'png.jpeg';
+      const nomeCandidato = selectedCandidate === 'lula' ? 'lula' : 'bolsonaro';
+      card2.src = `imagens/exemplo-${nomeCandidato}-2-${selectedGender}.${ext}`;
+      card3.src = `imagens/exemplo-${nomeCandidato}-3-${selectedGender}.${ext}`;
+
+      if (generatedImagesList && generatedImagesList.length >= 1) {
+        console.log("Exibindo a foto real do cliente no card 1.");
         card1.src = generatedImagesList[0];
-        card2.src = generatedImagesList[1];
-        card3.src = generatedImagesList[2];
         if (exampleNotice) exampleNotice.classList.add('hidden');
       } else {
-        console.log("Sem fotos geradas reais. Usando as fotos estáticas de exemplo como fallback.");
+        console.log("Sem foto gerada. Card 1 cai no exemplo estatico.");
+        card1.src = `imagens/exemplo-${nomeCandidato}-1-${selectedGender}.${ext}`;
         if (exampleNotice) exampleNotice.classList.remove('hidden');
-        if (selectedCandidate === 'lula') {
-          card1.src = `imagens/exemplo-lula-1-${selectedGender}.jpg.jpeg`;
-          card2.src = `imagens/exemplo-lula-2-${selectedGender}.jpg.jpeg`;
-          card3.src = `imagens/exemplo-lula-3-${selectedGender}.jpg.jpeg`;
-        } else {
-          card1.src = `imagens/exemplo-bolsonaro-1-${selectedGender}.png.jpeg`;
-          card2.src = `imagens/exemplo-bolsonaro-2-${selectedGender}.png.jpeg`;
-          card3.src = `imagens/exemplo-bolsonaro-3-${selectedGender}.png.jpeg`;
-        }
       }
 
       // Configure themes for pricing buttons

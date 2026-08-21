@@ -12,14 +12,24 @@ const SITE_URL = process.env.PUBLIC_SITE_URL || 'https://forte-apoio.vercel.app'
 
 // Free preview: only the 3 photos shown on the result screen are generated
 // before payment. Photos 4 and 5 come after the 5 photo package is bought.
-const PREVIEW_PHOTO_COUNT = 3;
+const PREVIEW_PHOTO_COUNT = 1;
 const FULL_PHOTO_COUNT = 5;
 
-// Face swap. The templates sent here are the "tapado-*" ones, which have the
-// politician's face covered by a grey rectangle: with only the supporter's face
-// left to detect, the model cannot put the customer's face on Lula/Bolsonaro.
-// /api/replicate-hook pastes the politician's real face back afterwards.
-const MODEL_VERSION = process.env.REPLICATE_MODEL_VERSION || 'd1d6ea8c8be89d664a07a457526f7128109dee7030fdac424788d762c71ed111';
+// Os templates enviados aqui sao os "sem-cabeca-*": a cabeca do modelo original
+// foi apagada com um retangulo cinza. Sem ninguem para se ancorar, o modelo e
+// obrigado a pintar o cliente ali - e traz o CABELO dele junto, coisa que um
+// face swap nao faz (o face swap troca so a parte interna do rosto, e o cliente
+// ficava com o cabelo e a barba do modelo do template).
+const MODEL = process.env.REPLICATE_MODEL || 'google/nano-banana';
+
+const EDIT_PROMPT = process.env.EDIT_PROMPT ||
+  'The first image has a grey rectangle covering where a person head should be. ' +
+  'The second image is a photo of that person. Paint the head of the person from ' +
+  'the second image into the grey area: their exact face, skin tone, hair, hairline ' +
+  'and facial hair, sized and angled to fit the body and shoulders that are already ' +
+  'there, smiling naturally at the camera. Nothing else in the first image may change: ' +
+  'the politician keeps his own face exactly as it is, and the clothes, the crowd, the ' +
+  'background, the lighting and the photographic style stay the same.';
 
 // Replicate throttles prediction creation to a burst of 1 while the account has
 // less than $5 of credit, so predictions are created one at a time with retries.
@@ -37,24 +47,24 @@ function buildTemplateUrls(dbCandidate, fromIndex, toIndex) {
 
   for (let i = fromIndex; i <= toIndex; i++) {
     const custom = process.env[`TEMPLATE_${candidato.toUpperCase()}_${gender.toUpperCase()}_${i}`];
-    list.push(custom || `${SITE_URL}/imagens/tapado-${candidato}-${i}-${gender}.jpg`);
+    list.push(custom || `${SITE_URL}/imagens/sem-cabeca-${candidato}-${i}-${gender}.jpg`);
   }
 
   return list;
 }
 
 async function createPrediction(templateUrl, sourceImageUrl, hookUrl) {
-  const r = await fetch('https://api.replicate.com/v1/predictions', {
+  const r = await fetch(`https://api.replicate.com/v1/models/${MODEL}/predictions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${replicateToken}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      version: MODEL_VERSION,
       input: {
-        input_image: templateUrl,  // template with the politician's face covered
-        swap_image: sourceImageUrl // the customer's selfie
+        prompt: EDIT_PROMPT,
+        image_input: [templateUrl, sourceImageUrl], // cenario sem cabeca + selfie
+        output_format: 'jpg'
       },
       webhook: hookUrl,
       webhook_events_filter: ['completed']
@@ -167,7 +177,7 @@ export default async (req, res) => {
     const templates = buildTemplateUrls(selfieRecord.candidate, existingUrls.length + 1, wanted);
     const hookUrl = `${SITE_URL}/api/replicate-hook?selfieId=${encodeURIComponent(selfieId)}`;
 
-    console.log(`[API Generate] Queueing ${templates.length} face swaps for ${selfieId}:`, templates);
+    console.log(`[API Generate] Queueing ${templates.length} edits (${MODEL}) for ${selfieId}:`, templates);
 
     const { created, error } = await createPredictionsSequentially(templates, selfieNormalizada, hookUrl);
 
