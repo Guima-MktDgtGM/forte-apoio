@@ -8,7 +8,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.8",
-    "replicate": "^0.28.1"
+    "replicate": "^0.28.1",
+    "sharp": "^0.35.3"
   },
   "engines": {
     "node": ">=18"

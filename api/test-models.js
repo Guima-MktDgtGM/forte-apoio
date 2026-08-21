@@ -20,7 +20,7 @@ export default async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { secret, model, prompt, images } = req.body || {};
+  const { secret, model, prompt, images, inputs } = req.body || {};
 
   if (secret !== SECRET) {
     return res.status(403).json({ error: 'Forbidden' });
@@ -30,26 +30,32 @@ export default async (req, res) => {
     return res.status(500).json({ error: 'REPLICATE_API_TOKEN is not configured' });
   }
 
-  if (!model || !Array.isArray(images) || images.length === 0) {
-    return res.status(400).json({ error: 'Missing model or images' });
+  if (!model || (!inputs && (!Array.isArray(images) || images.length === 0))) {
+    return res.status(400).json({ error: 'Missing model, images or inputs' });
   }
 
   try {
-    const input = { prompt: prompt || '', image_input: images, output_format: 'jpg' };
+    // 'inputs' lets us drive any model shape (face swap uses input_image/swap_image)
+    const input = inputs || { prompt: prompt || '', image_input: images, output_format: 'jpg' };
 
-    console.log(`[Test] Running ${model} with ${images.length} images`);
+    console.log(`[Test] Running ${model} with input:`, Object.keys(input).join(','));
     const started = Date.now();
 
     // Raw HTTP call: the replicate 0.28 client mangles array inputs.
     // "Prefer: wait" makes Replicate hold the response until the prediction ends.
-    const r = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
+    const versionHash = model.includes(':') ? model.split(':')[1] : null;
+    const endpoint = versionHash
+      ? 'https://api.replicate.com/v1/predictions'
+      : `https://api.replicate.com/v1/models/${model}/predictions`;
+
+    const r = await fetch(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${replicateToken}`,
         'Content-Type': 'application/json',
         Prefer: 'wait'
       },
-      body: JSON.stringify({ input })
+      body: JSON.stringify(versionHash ? { version: versionHash, input } : { input })
     });
 
     const prediction = await r.json();
