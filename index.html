@@ -1060,13 +1060,13 @@
       let uploadFinished = false;
       let uploadErrorOccurred = false;
 
-      // Interval to update progress percentage
+      // Interval to update progress percentage (Slower, premium rendering feeling)
       const progressInterval = setInterval(() => {
-        // Incrementa o progresso de forma realista
+        // Incrementa o progresso de forma lenta e realista
         if (currentPercent < 90) {
-          currentPercent += Math.floor(Math.random() * 6) + 3;
+          currentPercent += Math.floor(Math.random() * 3) + 1; // 1% a 3% por incremento
         } else if (uploadFinished) {
-          currentPercent += Math.floor(Math.random() * 5) + 2;
+          currentPercent += Math.floor(Math.random() * 5) + 3; // Completa rápido quando a IA terminar
         }
         
         if (currentPercent > 100) currentPercent = 100;
@@ -1089,7 +1089,7 @@
             showResultPage();
           }
         }
-      }, 300);
+      }, 650);
 
       // Rotate testimonials during loading
       let testimonialIndex = 0;
