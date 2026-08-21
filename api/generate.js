@@ -115,15 +115,19 @@ export default async (req, res) => {
           throw new Error("Empty output from Replicate");
         } catch (err) {
           console.error(`[API Generate] Replicate error for variation #${idx + 1}:`, err);
-          // Return default template as fallback on failure
-          return templateUrl;
+          throw new Error(`Variation #${idx + 1} failed: ${err.message || err}`);
         }
       });
 
       generatedUrls = await Promise.all(promises);
     } catch (e) {
       console.error("[API Generate] Parallel processing failure:", e);
-      return res.status(500).json({ error: "Parallel face swap processing failed" });
+      // Persist the exact error message in the Supabase status column for remote debugging
+      await supabase
+        .from('selfies')
+        .update({ status: `failed_replicate: ${e.message}` })
+        .eq('id', selfieId);
+      return res.status(500).json({ error: e.message });
     }
 
     // Filter out invalid entries
