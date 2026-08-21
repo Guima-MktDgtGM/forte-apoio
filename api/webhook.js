@@ -1,16 +1,10 @@
 const { createClient } = require('@supabase/supabase-js');
-const Replicate = require('replicate');
 
 // Initializing Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Service key is secure because this is server-side
 const supabase = (supabaseUrl && supabaseServiceKey) 
   ? createClient(supabaseUrl, supabaseServiceKey) 
-  : null;
-
-// Initializing Replicate
-const replicate = process.env.REPLICATE_API_TOKEN 
-  ? new Replicate({ auth: process.env.REPLICATE_API_TOKEN }) 
   : null;
 
 module.exports = async (req, res) => {
@@ -25,18 +19,15 @@ module.exports = async (req, res) => {
     console.log("Cakto webhook received payload:", JSON.stringify(payload));
 
     // 1. Validate payment status from Cakto
-    // Cakto webhook events send payment status in payload.status or payload.event
-    // Common properties: status: "paid" or event: "payment.approved"
     const status = payload.status || (payload.event && payload.event.includes('approved') ? 'paid' : '');
     const isPaid = status === 'paid' || status === 'approved' || status === 'completed' || payload.event === 'charge.paid';
 
     if (!isPaid) {
-      console.log(`Payment status not approved: ${status}. Skipping generation.`);
+      console.log(`Payment status not approved: ${status}. Skipping activation.`);
       return res.status(200).json({ status: "ignored", message: "Charge not paid" });
     }
 
     // 2. Retrieve the Unique Selfie ID (external_id / tracking parameters)
-    // We look in all common places where Cakto/payment gateways allow custom metadata injection
     const selfieId = payload.external_id || 
                      (payload.metadata && payload.metadata.selfie_id) || 
                      (payload.custom_fields && payload.custom_fields.selfie_id) ||
@@ -69,18 +60,15 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: "Selfie record not found" });
     }
 
-    console.log(`Selfie record retrieved. Candidate: ${selfieRecord.candidate}. Status: ${selfieRecord.status}`);
+    console.log(`Selfie record retrieved. Candidate: ${selfieRecord.candidate}. Current Status: ${selfieRecord.status}`);
 
-    // If already generated, avoid doing it twice
-    if (selfieRecord.status === 'completed' && selfieRecord.result_url) {
-      console.log(`Selfie already generated: ${selfieRecord.result_url}`);
-      return res.status(200).json({ status: "success", message: "Already generated", url: selfieRecord.result_url });
+    // If already completed, return success
+    if (selfieRecord.status === 'completed') {
+      console.log(`Selfie already activated/completed.`);
+      return res.status(200).json({ status: "success", message: "Already completed" });
     }
 
-    // Update status to processing
-    await supabase.from('selfies').update({ status: 'paid' }).eq('id', selfieId);
-
-    // 4. Determine Photo Count based on Payment Amount
+    // 4. Determine package limits based on Payment Amount
     let photoCount = 3; // Default to 3 (Militância)
     const rawAmount = payload.amount || (payload.payment && payload.payment.amount) || 0;
     const amountFloat = parseFloat(rawAmount);
@@ -93,99 +81,38 @@ module.exports = async (req, res) => {
       photoCount = 3;
     }
 
-    const siteUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://forteapoio.com.br';
-    const sourceImageUrl = selfieRecord.selfie_url;
-
-    if (!sourceImageUrl) {
-      console.error(`Missing selfie_url in DB record for ${selfieId}`);
-      return res.status(400).json({ error: "DB record is missing selfie_url" });
+    // 5. Truncate result_url according to package limit
+    let finalResultUrl = selfieRecord.result_url || "";
+    if (finalResultUrl) {
+      const urls = finalResultUrl.split(',');
+      const truncatedUrls = urls.slice(0, photoCount);
+      finalResultUrl = truncatedUrls.join(',');
     }
 
-    if (!replicate) {
-      console.error("Replicate client not configured. Set REPLICATE_API_TOKEN.");
-      return res.status(500).json({ error: "Replicate token not set" });
-    }
+    console.log(`Activating selfie ID ${selfieId} with ${photoCount} photos.`);
 
-    // Resolve templates array (reads candidate and gender, e.g. lula_m, lula_f)
-    const templateList = [];
-    const dbCandidate = selfieRecord.candidate || 'lula';
-    const [cand, gender] = dbCandidate.includes('_') ? dbCandidate.split('_') : [dbCandidate, 'm'];
-    const modelHash = process.env.REPLICATE_MODEL_VERSION || "9a423cef0b8ef6c5db1d4c556f4d411e737cd62da0e28f117c768994757c9e01";
-
-    for (let i = 1; i <= photoCount; i++) {
-      const genderUpper = gender.toUpperCase();
-      if (cand === 'lula') {
-        const customUrl = process.env[`TEMPLATE_LULA_${genderUpper}_${i}`] || process.env[`TEMPLATE_LULA_${i}`];
-        templateList.push(customUrl || `${siteUrl}/imagens/exemplo-lula-${i}-${gender}.jpg.jpeg`);
-      } else {
-        const customUrl = process.env[`TEMPLATE_BOLSONARO_${genderUpper}_${i}`] || process.env[`TEMPLATE_BOLSONARO_${i}`];
-        templateList.push(customUrl || `${siteUrl}/imagens/exemplo-bolsonaro-${i}-${gender}.png.jpeg`);
-      }
-    }
-
-    console.log(`Starting parallel Face Swap for ${photoCount} variations. Templates:`, templateList);
-
-    // 5. Trigger Replicate Faceswap model in parallel
-    let generatedUrls = [];
-    try {
-      const promises = templateList.map(async (templateUrl, idx) => {
-        try {
-          console.log(`Triggering Replicate for variation #${idx + 1} with target: ${templateUrl}`);
-          const output = await replicate.run(
-            `lucataco/faceswap:${modelHash}`,
-            {
-              input: {
-                target_image: templateUrl,
-                swap_image: sourceImageUrl
-              }
-            }
-          );
-          const url = Array.isArray(output) ? output[0] : output;
-          return url;
-        } catch (apiError) {
-          console.error(`Failed to run Replicate on template #${idx + 1}:`, apiError);
-          return null; // Return null so other promises can resolve
-        }
-      });
-
-      const results = await Promise.all(promises);
-      generatedUrls = results.filter(url => url !== null);
-    } catch (parallelError) {
-      console.error("Failed during parallel Replicate executions:", parallelError);
-      await supabase.from('selfies').update({ status: 'failed' }).eq('id', selfieId);
-      return res.status(500).json({ error: "AI Generation processes failed" });
-    }
-
-    if (generatedUrls.length === 0) {
-      console.error("No images generated successfully.");
-      await supabase.from('selfies').update({ status: 'failed' }).eq('id', selfieId);
-      return res.status(500).json({ error: "AI output URL list is empty" });
-    }
-
-    // Save results as a comma-separated string in DB
-    const resultsCsv = generatedUrls.join(',');
-    console.log("Parallel generation complete. Saved CSV:", resultsCsv);
-
-    // 6. Update database with generated image URLs list
+    // 6. Update database with completed status and filtered URLs (so thank you page can release downloads)
     const { error: updateError } = await supabase
       .from('selfies')
       .update({
         status: 'completed',
-        result_url: resultsCsv,
-        email: payload.customer?.email || selfieRecord.email || "",
-        phone: payload.customer?.phone || selfieRecord.phone || ""
+        result_url: finalResultUrl,
+        phone: payload.customer?.phone || selfieRecord.phone || "",
+        email: payload.customer?.email || selfieRecord.email || ""
       })
       .eq('id', selfieId);
 
     if (updateError) {
-      console.error("Failed to update Supabase record with results:", updateError);
+      console.error("Failed to update Supabase record to completed:", updateError);
+      return res.status(500).json({ error: "Failed to update record status" });
     }
+
+    console.log(`Selfie ID ${selfieId} successfully marked as completed!`);
 
     return res.status(200).json({
       status: "success",
       selfieId,
-      resultCount: generatedUrls.length,
-      results: generatedUrls
+      photoCount
     });
 
   } catch (error) {

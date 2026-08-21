@@ -613,6 +613,7 @@
     let currentSelfieId = "mock_" + Math.random().toString(36).substring(2, 11);
     let timerInterval = null;
     let selectedGender = 'm'; // 'm' para masculino, 'f' para feminino
+    let generatedImagesList = []; // Salvará os links das imagens reais geradas pela IA
 
     // Cakto Links Configurations for each candidate and package
     const caktoLinks = {
@@ -1137,6 +1138,26 @@
             
           if (dbError) throw dbError;
           console.log("Registro de selfie criado no Supabase com ID:", currentSelfieId);
+
+          // 4. Disparar geração paralela do Replicate chamando nossa API interna
+          console.log("Chamando API de geração para rodar o Face Swap...");
+          const response = await fetch('/api/generate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ selfieId: currentSelfieId })
+          });
+
+          if (!response.ok) {
+            throw new Error(`Erro na API de geração: ${response.statusText}`);
+          }
+
+          const resData = await response.json();
+          if (resData && resData.results) {
+            console.log("Geração concluída com sucesso! Imagens reais geradas:", resData.results);
+            generatedImagesList = resData.results;
+          }
         } else {
           console.log("Supabase não configurado. Continuando no modo offline demonstrativo.");
         }
@@ -1159,19 +1180,27 @@
       const candidateName = selectedCandidate === 'lula' ? 'Lula' : 'Bolsonaro';
       document.getElementById('result-title-candidate').innerText = candidateName;
 
-      // Map watermarked preview images depending on selected candidate
+      // Map watermarked preview images depending on selected candidate or generated images list
       const card1 = document.getElementById('img-result-card-1');
       const card2 = document.getElementById('img-result-card-2');
       const card3 = document.getElementById('img-result-card-3');
 
-      if (selectedCandidate === 'lula') {
-        card1.src = `imagens/exemplo-lula-1-${selectedGender}.jpg.jpeg`;
-        card2.src = `imagens/exemplo-lula-2-${selectedGender}.jpg.jpeg`;
-        card3.src = `imagens/exemplo-lula-3-${selectedGender}.jpg.jpeg`;
+      if (generatedImagesList && generatedImagesList.length >= 3) {
+        console.log("Exibindo as fotos geradas reais da pessoa com marca d'água!");
+        card1.src = generatedImagesList[0];
+        card2.src = generatedImagesList[1];
+        card3.src = generatedImagesList[2];
       } else {
-        card1.src = `imagens/exemplo-bolsonaro-1-${selectedGender}.png.jpeg`;
-        card2.src = `imagens/exemplo-bolsonaro-2-${selectedGender}.png.jpeg`;
-        card3.src = `imagens/exemplo-bolsonaro-3-${selectedGender}.png.jpeg`;
+        console.log("Sem fotos geradas reais. Usando as fotos estáticas de exemplo como fallback.");
+        if (selectedCandidate === 'lula') {
+          card1.src = `imagens/exemplo-lula-1-${selectedGender}.jpg.jpeg`;
+          card2.src = `imagens/exemplo-lula-2-${selectedGender}.jpg.jpeg`;
+          card3.src = `imagens/exemplo-lula-3-${selectedGender}.jpg.jpeg`;
+        } else {
+          card1.src = `imagens/exemplo-bolsonaro-1-${selectedGender}.png.jpeg`;
+          card2.src = `imagens/exemplo-bolsonaro-2-${selectedGender}.png.jpeg`;
+          card3.src = `imagens/exemplo-bolsonaro-3-${selectedGender}.png.jpeg`;
+        }
       }
 
       // Configure themes for pricing buttons
