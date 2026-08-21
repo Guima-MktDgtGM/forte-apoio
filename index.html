@@ -649,7 +649,7 @@
       "Finalizando renderização em alta definição..."
     ];
 
-    // Social Proof Testimonial Carousel List (Expanded to prevent fast repetition)
+    // Social Proof Testimonial Carousel List (Expanded to 25 items to prevent fast repetition)
     const testimonials = [
       { text: '"Ninguém acreditou que era montagem!"', author: "— Carlos, BH" },
       { text: '"Ficou extremamente realista! Mandei no grupo da família e todos piraram."', author: "— Marcos, SP" },
@@ -665,7 +665,17 @@
       { text: '"Botei no meu status do zap e ganhei um monte de curtidas!"', author: "— Fernando, PE" },
       { text: '"O melhor investimento de apoio que já fiz. Vale cada centavo."', author: "— Ricardo, SC" },
       { text: '"Fiquei muito bem na foto de terno ao lado dele!"', author: "— Thiago, AM" },
-      { text: '"Recomendo de olhos fechados. Muito realista mesmo."', author: "— Fernanda, MT" }
+      { text: '"Recomendo de olhos fechados. Muito realista mesmo."', author: "— Fernanda, MT" },
+      { text: '"O pessoal no grupo de política achou que fui convidado especial!"', author: "— André, PB" },
+      { text: '"Fiquei chocado com a qualidade da iluminação no meu rosto."', author: "— Aline, ES" },
+      { text: '"Sensacional! Agora posso mostrar pra todo mundo o meu apoio de verdade."', author: "— Marcelo, MA" },
+      { text: '"Meus amigos do trabalho acharam que eu tirei foto no camarim!"', author: "— Camila, SP" },
+      { text: '"Muito bem feito, a sombra do boné encaixou perfeitamente."', author: "— Jeferson, BA" },
+      { text: '"Muito seguro, o suporte tirou minhas dúvidas e as fotos vieram rápido."', author: "— Patrícia, PR" },
+      { text: '"Botei no Instagram e até o pessoal da oposição veio perguntar se era real!"', author: "— Lucas, RS" },
+      { text: '"Vale muito a pena pelas 3 opções diferentes de cenário!"', author: "— Carla, MS" },
+      { text: '"Uma ótima recordação dessa campanha histórica."', author: "— Nelson, SP" },
+      { text: '"A resolução da foto é ótima, dá pra ver cada detalhe!"', author: "— Mariana, PA" }
     ];
 
     // Hover Expansion Logic for the Diagonal Split (Screen 0)
@@ -1100,7 +1110,7 @@
         testimonialIndex = (testimonialIndex + 1) % testimonials.length;
         testimonialText.innerText = testimonials[testimonialIndex].text;
         testimonialAuthor.innerText = testimonials[testimonialIndex].author;
-      }, 2000);
+      }, 5000);
 
       // Executa o upload em background para o Supabase
       try {
